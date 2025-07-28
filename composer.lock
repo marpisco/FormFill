@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "fd2950f8c9cfbff5f69d480a8f35dcff",
+    "content-hash": "e11fa64727a0ed0b8d6307c090b469ee",
     "packages": [
         {
             "name": "fpdf/fpdf",
@@ -61,16 +61,16 @@
         },
         {
             "name": "juoum/giaeconnect",
-            "version": "v1.2.1",
+            "version": "v2.0.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/itsjuoum/GIAEConnect.git",
-                "reference": "4c43234fdb700de5c1cbc03856863570ea430600"
+                "reference": "61f37ffb6faa1d5ca0f087b6391bd58ca40d8f81"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/itsjuoum/GIAEConnect/zipball/4c43234fdb700de5c1cbc03856863570ea430600",
-                "reference": "4c43234fdb700de5c1cbc03856863570ea430600",
+                "url": "https://api.github.com/repos/itsjuoum/GIAEConnect/zipball/61f37ffb6faa1d5ca0f087b6391bd58ca40d8f81",
+                "reference": "61f37ffb6faa1d5ca0f087b6391bd58ca40d8f81",
                 "shasum": ""
             },
             "type": "library",
@@ -91,9 +91,9 @@
             "description": "This PHP class provides an unofficial API for the GIAE platform (Gestão Integrada para Administração Escolar), widely used on Portuguese public schools, on behalf of a given user.",
             "support": {
                 "issues": "https://github.com/itsjuoum/GIAEConnect/issues",
-                "source": "https://github.com/itsjuoum/GIAEConnect/tree/v1.2.1"
+                "source": "https://github.com/itsjuoum/GIAEConnect/tree/v2.0.0"
             },
-            "time": "2025-01-31T23:39:10+00:00"
+            "time": "2025-07-16T14:59:18+00:00"
         },
         {
             "name": "phpmailer/phpmailer",
@@ -222,10 +222,10 @@
     "packages-dev": [],
     "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": [],
+    "stability-flags": {},
     "prefer-stable": false,
     "prefer-lowest": false,
-    "platform": [],
-    "platform-dev": [],
-    "plugin-api-version": "2.3.0"
+    "platform": {},
+    "platform-dev": {},
+    "plugin-api-version": "2.6.0"
 }
