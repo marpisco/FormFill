@@ -18,14 +18,37 @@ if ($isEdit && !$form) {
     exit();
 }
 
+// Handle access management (private forms)
+$action = $_GET['action'] ?? '';
+if ($action === 'add_access' && $isEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $searchQuery = trim($_POST['user_search'] ?? '');
+    if (!empty($searchQuery)) {
+        $users = FormBuilder::searchUsers($searchQuery);
+        if (count($users) === 1) {
+            FormBuilder::addAccess($formId, $users[0]['id']);
+            acaoexecutada("Acesso concedido a {$users[0]['nome']}");
+        }
+    }
+    $form = FormBuilder::get($formId); // Refresh
+}
+if ($action === 'remove_access' && $isEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $userId = $_GET['user_id'] ?? '';
+    if (!empty($userId)) {
+        FormBuilder::removeAccess($formId, $userId);
+        acaoexecutada("Acesso removido");
+    }
+    $form = FormBuilder::get($formId); // Refresh
+}
+
 // Handle save
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_form'])) {
     $data = [
-        'nome'       => $_POST['nome'] ?? '',
-        'descricao'  => $_POST['descricao'] ?? '',
-        'instrucoes' => $_POST['instrucoes'] ?? '',
-        'ativado'    => isset($_POST['ativado']),
-        'campos'     => json_decode($_POST['campos_json'] ?? '[]', true) ?: [],
+        'nome'        => $_POST['nome'] ?? '',
+        'descricao'   => $_POST['descricao'] ?? '',
+        'instrucoes'  => $_POST['instrucoes'] ?? '',
+        'ativado'     => isset($_POST['ativado']),
+        'privacidade' => (int)($_POST['privacidade'] ?? 0),
+        'campos'      => json_decode($_POST['campos_json'] ?? '[]', true) ?: [],
         'doc'        => [
             'criar' => isset($_POST['doc_criar']),
             'texto' => $_POST['doc_texto'] ?? '',
@@ -92,7 +115,45 @@ $email = $form['email'] ?? [];
                 <input type="checkbox" name="ativado" <?= ($form['ativado'] ?? true) ? 'checked' : '' ?> class="rounded text-brand-600">
                 <span class="text-slate-600 dark:text-slate-300">Ativado</span>
             </label>
+            <div>
+                <label class="block text-xs font-medium text-slate-500 mb-1">Privacidade</label>
+                <select name="privacidade" class="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm">
+                    <option value="0" <?= (int)($form['privacidade'] ?? 0) === 0 ? 'selected' : '' ?>>🌐 Público — todos podem aceder</option>
+                    <option value="1" <?= (int)($form['privacidade'] ?? 0) === 1 ? 'selected' : '' ?>>🏢 Interno — apenas utilizadores internos</option>
+                    <option value="2" <?= (int)($form['privacidade'] ?? 0) === 2 ? 'selected' : '' ?>>🔒 Privado — apenas utilizadores autorizados</option>
+                </select>
+            </div>
         </div>
+
+        <!-- Access List (only for private forms) -->
+        <?php if ($isEdit && (int)($form['privacidade'] ?? 0) === 2): ?>
+        <?php $accessList = FormBuilder::getAccessList($formId); ?>
+        <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4" id="accessListPanel">
+            <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3">Utilizadores com acesso</h3>
+            <?php if (empty($accessList)): ?>
+            <p class="text-xs text-slate-400 mb-2">Nenhum utilizador adicionado.</p>
+            <?php else: ?>
+            <div class="space-y-1 mb-3">
+                <?php foreach ($accessList as $au): ?>
+                <div class="flex items-center justify-between text-sm py-1 px-2 rounded hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                    <span class="text-slate-700 dark:text-slate-200"><?= htmlspecialchars($au['nome']) ?></span>
+                    <form method="POST" action="?action=remove_access&id=<?= urlencode($formId) ?>&user_id=<?= urlencode($au['id']) ?>" class="inline">
+                        <?= Csrf::field() ?>
+                        <button class="text-xs text-red-500 hover:text-red-700">Remover</button>
+                    </form>
+                </div>
+                <?php endforeach; ?>
+            </div>
+            <?php endif; ?>
+            <form method="POST" action="?action=add_access&id=<?= urlencode($formId) ?>" class="flex gap-2">
+                <?= Csrf::field() ?>
+                <input type="text" name="user_search" placeholder="Procurar utilizador por nome ou email..."
+                       class="flex-1 px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm"
+                       list="userSearchList" autocomplete="off">
+                <button type="submit" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white text-sm rounded-lg transition">Adicionar</button>
+            </form>
+        </div>
+        <?php endif; ?>
 
         <!-- Field Palette -->
         <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">

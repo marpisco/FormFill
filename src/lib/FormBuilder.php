@@ -2,21 +2,27 @@
 /**
  * FormFill Form CRUD Operations
  * 
- * Manages form definitions in the database. Replaces the old formlist/*.json approach.
+ * Manages form definitions and access control in the database.
  */
 
 namespace FormFill\Lib;
 
 class FormBuilder
 {
+    // Privacy constants
+    public const PRIVACY_PUBLIC   = 0;
+    public const PRIVACY_INTERNAL = 1;
+    public const PRIVACY_PRIVATE  = 2;
+
     /**
      * List all forms, optionally including disabled ones.
+     * For admin use — no access filtering.
      */
     public static function list(bool $includeDisabled = false): array
     {
         global $db;
 
-        $sql = "SELECT f.id, f.nome, f.ativado, f.descricao, f.criado_em, 
+        $sql = "SELECT f.id, f.nome, f.ativado, f.descricao, f.privacidade, f.criado_em, 
                        c.nome AS criador_nome,
                        (SELECT COUNT(*) FROM respostas r WHERE r.form_id = f.id) AS total_respostas
                 FROM forms f
@@ -36,6 +42,104 @@ class FormBuilder
             $forms[] = $row;
         }
         return $forms;
+    }
+
+    /**
+     * List forms that a specific user is allowed to see.
+     * Respects privacy levels: public (all), internal (matching domain), private (access list).
+     */
+    public static function listForUser(string $userId): array
+    {
+        global $db;
+
+        $userStmt = $db->prepare("SELECT email FROM cache WHERE id = ?");
+        $userStmt->bind_param("s", $userId);
+        $userStmt->execute();
+        $user = $userStmt->get_result()->fetch_assoc();
+        $userStmt->close();
+
+        if (!$user) return [];
+
+        $userEmail = $user['email'];
+        $internalDomain = Config::get('internal_email_domain', '');
+
+        // Build the query with all three privacy levels
+        $sql = "SELECT f.id, f.nome, f.ativado, f.descricao, f.privacidade, f.criado_em,
+                       (SELECT COUNT(*) FROM respostas r WHERE r.form_id = f.id) AS total_respostas
+                FROM forms f
+                WHERE f.ativado = TRUE
+                AND (
+                    f.privacidade = 0
+                    OR (f.privacidade = 1 AND ? != '' AND ? LIKE CONCAT('%', ?, '%'))
+                    OR (f.privacidade = 2 AND EXISTS (
+                        SELECT 1 FROM forms_access fa WHERE fa.form_id = f.id AND fa.user_id = ?
+                    ))
+                )
+                ORDER BY f.criado_em DESC";
+
+        $stmt = $db->prepare($sql);
+        if (!$stmt) return [];
+
+        $stmt->bind_param("ssss", $internalDomain, $userEmail, $internalDomain, $userId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $stmt->close();
+
+        $forms = [];
+        while ($row = $result->fetch_assoc()) {
+            $forms[] = $row;
+        }
+        return $forms;
+    }
+
+    /**
+     * Check if a user can access a specific form.
+     */
+    public static function canAccess(string $formId, string $userId): bool
+    {
+        global $db;
+
+        // Get form privacy level
+        $stmt = $db->prepare("SELECT privacidade FROM forms WHERE id = ? AND ativado = TRUE");
+        $stmt->bind_param("s", $formId);
+        $stmt->execute();
+        $form = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+
+        if (!$form) return false;
+
+        $privacidade = (int)$form['privacidade'];
+
+        // Public — everyone
+        if ($privacidade === self::PRIVACY_PUBLIC) return true;
+
+        // Get user email
+        $userStmt = $db->prepare("SELECT email FROM cache WHERE id = ?");
+        $userStmt->bind_param("s", $userId);
+        $userStmt->execute();
+        $user = $userStmt->get_result()->fetch_assoc();
+        $userStmt->close();
+
+        if (!$user) return false;
+
+        // Internal — same domain
+        if ($privacidade === self::PRIVACY_INTERNAL) {
+            $internalDomain = Config::get('internal_email_domain', '');
+            if (empty($internalDomain)) return false;
+            return str_ends_with($user['email'], '@' . $internalDomain);
+        }
+
+        // Private — access list
+        if ($privacidade === self::PRIVACY_PRIVATE) {
+            $accessStmt = $db->prepare("SELECT 1 FROM forms_access WHERE form_id = ? AND user_id = ?");
+            $accessStmt->bind_param("ss", $formId, $userId);
+            $accessStmt->execute();
+            $hasAccess = $accessStmt->get_result()->num_rows > 0;
+            $accessStmt->close();
+            return $hasAccess;
+        }
+
+        return false;
     }
 
     /**
@@ -74,6 +178,7 @@ class FormBuilder
         $ativado = $data['ativado'] ?? true;
         $descricao = $data['descricao'] ?? '';
         $instrucoes = $data['instrucoes'] ?? '';
+        $privacidade = (int)($data['privacidade'] ?? self::PRIVACY_PUBLIC);
         $campos = json_encode($data['campos'] ?? [], JSON_UNESCAPED_UNICODE);
         $doc = json_encode($data['doc'] ?? ['criar' => true, 'texto' => ''], JSON_UNESCAPED_UNICODE);
         $email = json_encode($data['email'] ?? [
@@ -85,11 +190,11 @@ class FormBuilder
         $criadoPor = $_SESSION['id'] ?? null;
 
         $stmt = $db->prepare(
-            "INSERT INTO forms (id, nome, ativado, descricao, instrucoes, campos, doc, email, criado_por) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO forms (id, nome, ativado, descricao, instrucoes, campos, doc, email, privacidade, criado_por) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         );
         if ($stmt) {
-            $stmt->bind_param("ssissssss", $id, $nome, $ativado, $descricao, $instrucoes, $campos, $doc, $email, $criadoPor);
+            $stmt->bind_param("ssisssssis", $id, $nome, $ativado, $descricao, $instrucoes, $campos, $doc, $email, $privacidade, $criadoPor);
             $stmt->execute();
             $stmt->close();
         }
@@ -108,16 +213,17 @@ class FormBuilder
         $ativado = $data['ativado'] ?? null;
         $descricao = $data['descricao'] ?? null;
         $instrucoes = $data['instrucoes'] ?? null;
+        $privacidade = isset($data['privacidade']) ? (int)$data['privacidade'] : null;
         $campos = isset($data['campos']) ? json_encode($data['campos'], JSON_UNESCAPED_UNICODE) : null;
         $doc = isset($data['doc']) ? json_encode($data['doc'], JSON_UNESCAPED_UNICODE) : null;
         $email = isset($data['email']) ? json_encode($data['email'], JSON_UNESCAPED_UNICODE) : null;
 
         $stmt = $db->prepare(
-            "UPDATE forms SET nome = ?, ativado = ?, descricao = ?, instrucoes = ?, campos = ?, doc = ?, email = ? WHERE id = ?"
+            "UPDATE forms SET nome = ?, ativado = ?, descricao = ?, instrucoes = ?, privacidade = ?, campos = ?, doc = ?, email = ? WHERE id = ?"
         );
         if (!$stmt) return false;
 
-        $stmt->bind_param("sissssss", $nome, $ativado, $descricao, $instrucoes, $campos, $doc, $email, $id);
+        $stmt->bind_param("sississss", $nome, $ativado, $descricao, $instrucoes, $privacidade, $campos, $doc, $email, $id);
         $result = $stmt->execute();
         $stmt->close();
 
@@ -150,6 +256,82 @@ class FormBuilder
         $result = $stmt->execute();
         $stmt->close();
         return $result;
+    }
+
+    // ─── Access List Management (for privacidade = 2) ─────────────────────
+
+    /**
+     * Get the list of users who have access to a private form.
+     */
+    public static function getAccessList(string $formId): array
+    {
+        global $db;
+        $stmt = $db->prepare(
+            "SELECT c.id, c.nome, c.email FROM forms_access fa 
+             JOIN cache c ON fa.user_id = c.id 
+             WHERE fa.form_id = ?
+             ORDER BY c.nome"
+        );
+        if (!$stmt) return [];
+        $stmt->bind_param("s", $formId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $stmt->close();
+
+        $users = [];
+        while ($row = $result->fetch_assoc()) {
+            $users[] = $row;
+        }
+        return $users;
+    }
+
+    /**
+     * Grant a user access to a private form.
+     */
+    public static function addAccess(string $formId, string $userId): bool
+    {
+        global $db;
+        $stmt = $db->prepare("INSERT IGNORE INTO forms_access (form_id, user_id) VALUES (?, ?)");
+        if (!$stmt) return false;
+        $stmt->bind_param("ss", $formId, $userId);
+        $result = $stmt->execute();
+        $stmt->close();
+        return $result;
+    }
+
+    /**
+     * Revoke a user's access to a private form.
+     */
+    public static function removeAccess(string $formId, string $userId): bool
+    {
+        global $db;
+        $stmt = $db->prepare("DELETE FROM forms_access WHERE form_id = ? AND user_id = ?");
+        if (!$stmt) return false;
+        $stmt->bind_param("ss", $formId, $userId);
+        $result = $stmt->execute();
+        $stmt->close();
+        return $result;
+    }
+
+    /**
+     * Search users by name or email (for access list autocomplete).
+     */
+    public static function searchUsers(string $query): array
+    {
+        global $db;
+        $q = "%{$query}%";
+        $stmt = $db->prepare("SELECT id, nome, email FROM cache WHERE nome LIKE ? OR email LIKE ? ORDER BY nome LIMIT 20");
+        if (!$stmt) return [];
+        $stmt->bind_param("ss", $q, $q);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $stmt->close();
+
+        $users = [];
+        while ($row = $result->fetch_assoc()) {
+            $users[] = $row;
+        }
+        return $users;
     }
 
     /**

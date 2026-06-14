@@ -45,6 +45,7 @@ $forms = FormBuilder::list(true);
             <tr class="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
                 <th class="text-left px-4 py-3 font-medium text-slate-600 dark:text-slate-300">Nome</th>
                 <th class="text-left px-4 py-3 font-medium text-slate-600 dark:text-slate-300 hidden sm:table-cell">Estado</th>
+                <th class="text-left px-4 py-3 font-medium text-slate-600 dark:text-slate-300 hidden sm:table-cell">Privacidade</th>
                 <th class="text-left px-4 py-3 font-medium text-slate-600 dark:text-slate-300 hidden md:table-cell">Respostas</th>
                 <th class="text-right px-4 py-3 font-medium text-slate-600 dark:text-slate-300">Ações</th>
             </tr>
@@ -52,7 +53,7 @@ $forms = FormBuilder::list(true);
         <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
             <?php if (empty($forms)): ?>
             <tr>
-                <td colspan="4" class="px-4 py-8 text-center text-slate-400">Nenhum formulário criado.</td>
+                <td colspan="5" class="px-4 py-8 text-center text-slate-400">Nenhum formulário criado.</td>
             </tr>
             <?php else: ?>
             <?php foreach ($forms as $form): ?>
@@ -69,6 +70,14 @@ $forms = FormBuilder::list(true);
                     <?php else: ?>
                     <span class="inline-flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded-full">Inativo</span>
                     <?php endif; ?>
+                </td>
+                <td class="px-4 py-3 hidden sm:table-cell">
+                    <?php
+                    $priv = (int)($form['privacidade'] ?? 0);
+                    $privLabels = [0 => ['Público', 'text-slate-500 bg-slate-100'], 1 => ['Interno', 'text-blue-500 bg-blue-50'], 2 => ['Privado', 'text-amber-500 bg-amber-50']];
+                    $pl = $privLabels[$priv] ?? $privLabels[0];
+                    ?>
+                    <span class="inline-flex items-center gap-1 text-xs <?= $pl[1] ?> dark:bg-opacity-20 px-2 py-0.5 rounded-full"><?= $pl[0] ?></span>
                 </td>
                 <td class="px-4 py-3 text-slate-500 hidden md:table-cell"><?= (int)($form['total_respostas'] ?? 0) ?></td>
                 <td class="px-4 py-3 text-right">

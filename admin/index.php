@@ -107,6 +107,7 @@ $nomeSafe = htmlspecialchars($_SESSION['nome'] ?? 'Admin', ENT_QUOTES, 'UTF-8');
                     <?= navLink('/admin/', 'Dashboard') ?>
                     <?= navLink('/admin/forms.php', 'Formulários') ?>
                     <?= navLink('/admin/responses.php', 'Respostas') ?>
+                    <?= navLink('/admin/registos.php', 'Registos') ?>
                     <?= navLink('/admin/users.php', 'Utilizadores') ?>
                     <?= navLink('/admin/settings.php', 'Configurações') ?>
                 </div>
@@ -145,19 +146,29 @@ if (parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) === '/admin/') {
     echo '<div class="grid gap-4 sm:grid-cols-3 mb-8">';
     foreach ($stats as $stat) {
         $colors = [
-            'brand' => 'border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-900/20',
-            'emerald' => 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20',
-            'amber' => 'border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20',
+            'brand'   => 'border-brand-200 dark:border-brand-700 bg-brand-50 dark:bg-brand-950',
+            'emerald' => 'border-emerald-200 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950',
+            'amber'   => 'border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-950',
         ];
         $textColors = [
-            'brand' => 'text-brand-700 dark:text-brand-300',
+            'brand'   => 'text-brand-700 dark:text-brand-300',
             'emerald' => 'text-emerald-700 dark:text-emerald-300',
-            'amber' => 'text-amber-700 dark:text-amber-300',
+            'amber'   => 'text-amber-700 dark:text-amber-300',
+        ];
+        $labelColors = [
+            'brand'   => 'text-slate-500 dark:text-brand-200/70',
+            'emerald' => 'text-slate-500 dark:text-emerald-200/70',
+            'amber'   => 'text-slate-500 dark:text-amber-200/70',
+        ];
+        $subColors = [
+            'brand'   => 'text-slate-400 dark:text-brand-300/50',
+            'emerald' => 'text-slate-400 dark:text-emerald-300/50',
+            'amber'   => 'text-slate-400 dark:text-amber-300/50',
         ];
         echo "<div class='rounded-xl border {$colors[$stat['color']]} p-5'>
-            <p class='text-sm text-slate-500 dark:text-slate-400'>{$stat['label']}</p>
+            <p class='text-sm {$labelColors[$stat['color']]}'>{$stat['label']}</p>
             <p class='text-3xl font-bold {$textColors[$stat['color']]} mt-1'>{$stat['value']}</p>
-            <p class='text-xs text-slate-400 dark:text-slate-500 mt-1'>{$stat['sub']}</p>
+            <p class='text-xs {$subColors[$stat['color']]} mt-1'>{$stat['sub']}</p>
         </div>";
     }
     echo '</div>';

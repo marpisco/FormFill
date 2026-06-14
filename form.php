@@ -28,6 +28,12 @@ if (!$form || empty($form['ativado'])) {
     die("<div class='p-8 text-center text-red-500'>Formulário não encontrado ou desativado.</div>");
 }
 
+// Access control
+if (!FormBuilder::canAccess($formId, $_SESSION['id'])) {
+    http_response_code(403);
+    die("<div class='p-8 text-center text-red-500'>Não tem permissão para aceder a este formulário.</div>");
+}
+
 $brand = Config::brandName();
 $campos = $form['campos'] ?? [];
 ?>

@@ -37,6 +37,12 @@ if (!$form) {
     die("Formulário não encontrado.");
 }
 
+// Access control
+if (!FormBuilder::canAccess($formId, $_SESSION['id'])) {
+    http_response_code(403);
+    die("Não tem permissão para submeter este formulário.");
+}
+
 // ─── Gather User Data ───────────────────────────────────────────────────────
 global $db;
 $stmt = $db->prepare("SELECT id, nome, email FROM cache WHERE id = ?");

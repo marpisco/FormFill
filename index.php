@@ -15,7 +15,7 @@ use FormFill\Lib\FormBuilder;
 
 Session::requireLogin();
 
-$forms = FormBuilder::list();
+$forms = FormBuilder::listForUser($_SESSION['id']);
 $brand = Config::brandName();
 ?>
 <!DOCTYPE html>
