@@ -169,8 +169,13 @@ $brand = Config::brandName();
             theme: { extend: { colors: { brand: { 600: '#4f46e5', 700: '#4338ca' } } } }
         }
     </script>
+    <script>
+        if (window.matchMedia('(prefers-color-scheme: dark)').matches || localStorage.getItem('theme') === 'dark') {
+            document.documentElement.classList.add('dark');
+        }
+    </script>
 </head>
-<body class="h-full bg-slate-50 dark:bg-slate-900 flex items-center justify-center min-h-screen p-4">
+<body class="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-emerald-50 via-white to-teal-50 dark:from-slate-950 dark:via-slate-900 dark:to-emerald-950">
     <div class="w-full max-w-lg text-center">
         <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-slate-200 dark:border-slate-700 p-8">
             <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900/30 mb-4">

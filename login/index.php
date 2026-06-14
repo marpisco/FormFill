@@ -175,13 +175,13 @@ if ($step === 'logout') {
             }
         }
     </script>
-    <style>
-        @media (prefers-color-scheme: dark) {
-            html.dark-auto { color-scheme: dark; }
+    <script>
+        if (window.matchMedia('(prefers-color-scheme: dark)').matches || localStorage.getItem('theme') === 'dark') {
+            document.documentElement.classList.add('dark');
         }
-    </style>
+    </script>
 </head>
-<body class="h-full bg-slate-50 dark:bg-slate-900 flex items-center justify-center min-h-screen p-4">
+<body class="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-brand-50 via-white to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-brand-950">
     <div class="w-full max-w-md">
         <!-- Logo / Brand -->
         <div class="text-center mb-8">

@@ -38,7 +38,7 @@ $brand = Config::brandName();
         }
     </script>
 </head>
-<body class="h-full bg-slate-50 dark:bg-slate-900">
+<body class="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-900">
     <?php if (Config::isDev()): ?>
     <div class="sticky top-0 z-50 bg-red-500 text-white text-xs font-bold text-center py-1">
         ⚠️ MODO DE DESENVOLVIMENTO
