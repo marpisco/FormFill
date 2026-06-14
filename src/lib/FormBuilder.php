@@ -388,6 +388,8 @@ class FormBuilder
             $idcampo = $campo['idcampo'] ?? '';
             if (empty($idcampo)) {
                 $errors[] = "Campo #" . ($i + 1) . ": ID em falta.";
+            } elseif (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $idcampo)) {
+                $errors[] = "Campo #" . ($i + 1) . ": ID '{$idcampo}' inválido (use apenas letras, números e underscore, começando com letra).";
             } elseif (in_array($idcampo, $reserved, true)) {
                 $errors[] = "Campo #" . ($i + 1) . ": ID '{$idcampo}' é reservado pelo sistema.";
             } elseif (isset($seenIds[$idcampo])) {

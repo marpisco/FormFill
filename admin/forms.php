@@ -3,7 +3,7 @@
  * Admin — Form List
  */
 
-require 'index.php';
+require_once __DIR__ . '/index.php';
 
 use FormFill\Lib\FormBuilder;
 use FormFill\Lib\Csrf;

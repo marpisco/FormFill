@@ -46,10 +46,11 @@ if ($action === 'sign' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($pdfContent !== false && preg_match('/\/ByteRange\s*\[\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*\]/', $pdfContent, $m)) {
             $a = (int)$m[1]; $b = (int)$m[2]; $c = (int)$m[3]; $d = (int)$m[4];
-            // Extract CMS signature from byte range: bytes [a .. b-1]
-            $cmsData = substr($pdfContent, $a, $b);
-            // Signed data: bytes [0 .. a-1] + [c .. c+d-1]
-            $signedData = substr($pdfContent, 0, $a) . substr($pdfContent, $c, $d);
+            // ByteRange [a b c d]: signed ranges are [a..a+b) and [c..c+d).
+            // The CMS signature lives in the gap: bytes [b..c).
+            $cmsData = substr($pdfContent, $b, $c - $b);
+            // Signed data = first range + second range
+            $signedData = substr($pdfContent, $a, $b) . substr($pdfContent, $c, $d);
             // Write extracted data to temp files for openssl
             $tmpCms = tempnam(sys_get_temp_dir(), 'pdfsig_');
             $tmpData = tempnam(sys_get_temp_dir(), 'pdfdat_');
@@ -87,6 +88,11 @@ if ($action === 'sign' && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 $signedAbsPath = __DIR__ . '/' . $signedRelPath;
 
                 if (move_uploaded_file($uploadedPath, $signedAbsPath)) {
+                    // Delete the original unsigned PDF
+                    if ($existing['pdf_path'] && $existing['pdf_path'] !== '' && $existing['pdf_path'] !== $signedRelPath) {
+                        $oldPdf = __DIR__ . '/' . ltrim($existing['pdf_path'], '/');
+                        if (file_exists($oldPdf)) @unlink($oldPdf);
+                    }
                     $upStmt = $db->prepare("UPDATE respostas SET pdf_path = ?, signing_pending = FALSE WHERE id = ?");
                     if ($upStmt) {
                         $upStmt->bind_param("ss", $signedRelPath, $respostaId);
@@ -286,6 +292,9 @@ if ($action !== 'sign' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST[
             $origName = basename($fileInfo['name']);
             $ext = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
             if (!in_array($ext, $allowedExtensions, true)) {
+                if (!empty($campo['obrigatorio'])) {
+                    $validationErrors[] = "O ficheiro '" . ($campo['descricao'] ?? $idcampo) . "' tem uma extensão não permitida.";
+                }
                 continue;
             }
             $uploadsDir = __DIR__ . '/../data/uploads';
@@ -293,7 +302,8 @@ if ($action !== 'sign' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST[
             $storedName = date('Ymd') . '_' . Validator::uuid4() . '_' . $origName;
             $destPath = $uploadsDir . '/' . $storedName;
             if (move_uploaded_file($fileInfo['tmp_name'], $destPath)) {
-                $fieldValues[$campo['idcampo']] = 'data/uploads/' . $storedName;
+                // Store path relative to project root (admin cleanup resolves with __DIR__ . '/../')
+                $fieldValues[$campo['idcampo']] = '../data/uploads/' . $storedName;
             }
         }
     }

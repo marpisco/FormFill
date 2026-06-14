@@ -3,7 +3,7 @@
  * Admin — User Management
  */
 
-require 'index.php';
+require_once __DIR__ . '/index.php';
 
 use FormFill\Lib\Csrf;
 
@@ -88,11 +88,10 @@ if ($action === 'delete' && !empty($_GET['id']) && $_SERVER['REQUEST_METHOD'] ==
     $refs['access'] = (int)$check->get_result()->fetch_assoc()['c'];
     $check->close();
 
-    $totalRefs = array_sum($refs);
+    $totalRefs = $refs['respostas'] + $refs['forms'] + $refs['access'];
     if ($totalRefs > 0) {
         $msg = "Não é possível eliminar: utilizador tem {$refs['respostas']} respostas, "
-             . "{$refs['forms']} formulários, {$refs['logs']} registos de log, "
-             . "{$refs['access']} acessos a formulários.";
+             . "{$refs['forms']} formulários, {$refs['access']} acessos a formulários.";
         echo "<script>alert(" . json_encode($msg) . "); window.history.back();</script>";
     } else {
         // Clean up access entries and logs referencing this user

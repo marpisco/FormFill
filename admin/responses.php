@@ -3,7 +3,7 @@
  * Admin — Response Management
  */
 
-require 'index.php';
+require_once __DIR__ . '/index.php';
 
 use FormFill\Lib\Csrf;
 use FormFill\Lib\Mailer;
@@ -101,7 +101,7 @@ if ($action === 'delete' && !empty($_GET['id']) && $_SERVER['REQUEST_METHOD'] ==
         $fieldValues = json_decode($dados, true);
         if (is_array($fieldValues)) {
             foreach ($fieldValues as $val) {
-                if (is_string($val) && preg_match('#^data/uploads/#', $val)) {
+                if (is_string($val) && preg_match('#^(\.\./)?data/uploads/#', $val)) {
                     $uploadFile = __DIR__ . '/../' . ltrim($val, '/');
                     if (file_exists($uploadFile)) {
                         @unlink($uploadFile);
@@ -117,10 +117,18 @@ if ($action === 'delete' && !empty($_GET['id']) && $_SERVER['REQUEST_METHOD'] ==
 // ─── List responses ──────────────────────────────────────────────────────────
 $search = $_GET['q'] ?? '';
 $filterForm = $_GET['form'] ?? '';
+$showSigning = !empty($_GET['show_signing']);
+$page = max(1, (int)($_GET['page'] ?? 1));
+$perPage = 50;
 
 $where = '';
 $params = [];
 $types = '';
+
+// Default: hide signing-pending unless explicitly requested
+if (!$showSigning) {
+    $where .= " AND r.signing_pending = FALSE";
+}
 
 if (!empty($search)) {
     $where .= " AND (f.nome LIKE ? OR c.nome LIKE ?)";
@@ -140,9 +148,14 @@ $sql = "SELECT r.id, r.form_id, r.pdf_path, r.respondido, r.signing_pending, r.d
         FROM respostas r
         JOIN forms f ON r.form_id = f.id
         JOIN cache c ON r.enviador_id = c.id
-        WHERE r.signing_pending = FALSE{$where}
+        WHERE 1=1{$where}
         ORDER BY r.criado_em DESC
-        LIMIT 100";
+        LIMIT ? OFFSET ?";
+
+$params[] = $perPage;
+$types .= 'i';
+$params[] = ($page - 1) * $perPage;
+$types .= 'i';
 
 $stmt = $db->prepare($sql);
 if ($stmt) {
@@ -154,6 +167,22 @@ if ($stmt) {
     $stmt->close();
 } else {
     $respostas = $db->query($sql);
+}
+
+// Count total for pagination
+$countSql = "SELECT COUNT(*) as total FROM respostas r JOIN forms f ON r.form_id = f.id JOIN cache c ON r.enviador_id = c.id WHERE 1=1{$where}";
+$countStmt = $db->prepare($countSql);
+$totalRows = 0;
+if ($countStmt) {
+    // Remove the last two params (LIMIT/OFFSET) before binding for count
+    array_pop($types); array_pop($params);
+    array_pop($types); array_pop($params);
+    if (!empty($params)) {
+        $countStmt->bind_param($types, ...$params);
+    }
+    $countStmt->execute();
+    $totalRows = (int)$countStmt->get_result()->fetch_assoc()['total'];
+    $countStmt->close();
 }
 
 // Fetch forms for filter dropdown
@@ -173,6 +202,11 @@ $formsList = $db->query("SELECT id, nome FROM forms ORDER BY nome");
         <option value="<?= htmlspecialchars($f['id']) ?>" <?= $filterForm === $f['id'] ? 'selected' : '' ?>><?= htmlspecialchars($f['nome']) ?></option>
         <?php endwhile; ?>
     </select>
+    <label class="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300 whitespace-nowrap">
+        <input type="checkbox" name="show_signing" value="1" onchange="this.form.submit()" <?= $showSigning ? 'checked' : '' ?>
+               class="rounded border-slate-300 dark:border-slate-600 text-brand-600 focus:ring-brand-500">
+        Pendentes assinatura
+    </label>
 </form>
 
 <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
@@ -224,6 +258,20 @@ $formsList = $db->query("SELECT id, nome FROM forms ORDER BY nome");
         </tbody>
     </table>
 </div>
+
+<?php $totalPages = max(1, (int)ceil($totalRows / $perPage)); ?>
+<?php if ($totalPages > 1): ?>
+<div class="mt-4 flex items-center justify-center gap-2 text-sm">
+    <?php $urlBase = "?q=" . urlencode($search) . "&form=" . urlencode($filterForm) . ($showSigning ? "&show_signing=1" : ""); ?>
+    <?php if ($page > 1): ?>
+    <a href="<?= $urlBase ?>&page=<?= $page - 1 ?>" class="px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition">Anterior</a>
+    <?php endif; ?>
+    <span class="text-slate-500 dark:text-slate-400">Página <?= $page ?> de <?= $totalPages ?></span>
+    <?php if ($page < $totalPages): ?>
+    <a href="<?= $urlBase ?>&page=<?= $page + 1 ?>" class="px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition">Seguinte</a>
+    <?php endif; ?>
+</div>
+<?php endif; ?>
 
 <!-- Response Modal -->
 <div id="respondModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">

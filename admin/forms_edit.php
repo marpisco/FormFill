@@ -3,7 +3,7 @@
  * Admin — Form Builder (Create/Edit)
  */
 
-require 'index.php';
+require_once __DIR__ . '/index.php';
 
 use FormFill\Lib\Csrf;
 use FormFill\Lib\FormBuilder;

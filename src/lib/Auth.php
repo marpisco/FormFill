@@ -162,8 +162,8 @@ class Auth
         $claimedAdmin = false;
         if (!$needsNameSetup || !empty($user['admin'])) {
             // Already set up or already admin — just login
-        } elseif (defined('IS_FIRST_RUN') && IS_FIRST_RUN) {
-            // New user on a fresh installation — atomic first-admin claim
+        } elseif (!Config::get('initial_setup_complete')) {
+            // No admin has been claimed yet — atomic first-admin claim via INSERT
             $claimStmt = $db->prepare(
                 "INSERT INTO config (config_key, config_value) VALUES ('first_user_admin_id', ?) 
                  ON DUPLICATE KEY UPDATE config_value = config_value"
@@ -332,6 +332,17 @@ class Auth
             $stmt->close();
 
             if ($existing) {
+                // Check if this is a pre-registered user that needs migration
+                if (str_starts_with($existing['id'], 'pre_') || str_starts_with($existing['id'], 'pending_')) {
+                    $oid = $userData['oid'] ?? $userData['id'] ?? Validator::uuid4();
+                    $newId = 'ms_' . $oid;
+                    $displayName = $userData['displayName'] ?? $existing['nome'];
+                    $migrated = self::migratePreRegistered($email, $newId, $displayName);
+                    if ($migrated !== false) {
+                        $existing['id'] = $newId;
+                        $existing['admin'] = $existing['admin'] || $migrated;
+                    }
+                }
                 // Existing user — login directly
                 $user = $existing;
             } else {
@@ -355,8 +366,8 @@ class Auth
 
                 $user = ['id' => $userId, 'nome' => $displayName, 'email' => $email, 'admin' => $migrated, 'totp_secret' => null];
 
-                // Race-safe first-user admin claim (gated on fresh installation only)
-                if (!$migrated && defined('IS_FIRST_RUN') && IS_FIRST_RUN) {
+                // Race-safe first-user admin claim (gated on no existing admin claim)
+                if (!$migrated && !Config::get('initial_setup_complete')) {
                     $claimStmt = $db->prepare(
                         "INSERT INTO config (config_key, config_value) VALUES ('first_user_admin_id', ?) 
                          ON DUPLICATE KEY UPDATE config_value = config_value"
@@ -570,8 +581,11 @@ class Auth
         Session::regenerate();
         Csrf::regenerate();
 
-        // Clear any stale TOTP verification from a previous login session
-        unset($_SESSION['totp_verified'], $_SESSION['admin_checked_at']);
+        // Clear stale TOTP verification only when a different user logs in
+        if (isset($_SESSION['id']) && $_SESSION['id'] !== $user['id']) {
+            unset($_SESSION['totp_verified']);
+        }
+        unset($_SESSION['admin_checked_at']);
 
         $_SESSION['id']       = $user['id'];
         $_SESSION['nome']     = $user['nome'];

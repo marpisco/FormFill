@@ -3,7 +3,7 @@
  * Admin — Audit Logs (Registos)
  */
 
-require 'index.php';
+require_once __DIR__ . '/index.php';
 
 global $db;
 

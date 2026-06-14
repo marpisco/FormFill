@@ -31,6 +31,10 @@ $error = null;
 $message = null;
 $needsTotp = false;
 
+// Check which auth providers are enabled
+$smtpEnabled = ($GLOBALS['smtp_config']['enabled'] ?? false);
+$oauthEnabled = ($GLOBALS['oauth2_config']['enabled'] ?? false);
+
 // ─── Route: OAuth2 Callback ──────────────────────────────────────────────────
 if ($isCallback) {
     $result = Auth::handleOAuthCallback($_GET['code'], $_GET['state']);
@@ -265,6 +269,13 @@ if ($step === 'logout') {
 
             <!-- ═══ STEP: Email Entry ═══ -->
             <?php if ($step === 'email'): ?>
+                <?php if (!$smtpEnabled && !$oauthEnabled): ?>
+                <div class="mb-6 px-4 py-3 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 rounded-lg">
+                    <p class="text-amber-700 dark:text-amber-300 text-sm">Nenhum método de autenticação configurado. Contacte o administrador.</p>
+                </div>
+                <?php endif; ?>
+
+                <?php if ($smtpEnabled): ?>
                 <h2 class="text-xl font-semibold text-slate-800 dark:text-slate-200 mb-2">Entrar</h2>
                 <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">Insira o seu email para receber um código de verificação.</p>
 
@@ -281,6 +292,7 @@ if ($step === 'logout') {
                         Enviar código
                     </button>
                 </form>
+                <?php endif; ?>
 
                 <!-- OAuth2 button (only when enabled) -->
                 <?php $oauthUrl = Auth::getOAuthUrl(); ?>
