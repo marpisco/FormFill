@@ -256,9 +256,14 @@ class Auth
             return '';
         }
 
+        // Explicitly generate and store state ourselves — do NOT rely on
+        // league/oauth2-client's internal state tracking via getState(),
+        // which behaves inconsistently across versions.
+        $state = bin2hex(random_bytes(16));
+        $_SESSION['oauth2state'] = $state;
+
         $provider = self::createOAuthProvider();
-        $authUrl = $provider->getAuthorizationUrl();
-        $_SESSION['oauth2state'] = $provider->getState();
+        $authUrl = $provider->getAuthorizationUrl(['state' => $state]);
         return $authUrl;
     }
 

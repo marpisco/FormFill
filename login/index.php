@@ -60,7 +60,7 @@ if ($step === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // ─── Route: Email OTP — Verify Code ──────────────────────────────────────────
-if ($step === 'verify' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($step === 'verify' && $_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['code'])) {
     if (!Csrf::verify($_POST['csrf_token'] ?? '')) {
         $error = 'Pedido inválido.';
     } else {
@@ -81,7 +81,7 @@ if ($step === 'verify' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // ─── Route: Name Setup ───────────────────────────────────────────────────────
-if ($step === 'setup' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($step === 'setup' && $_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['nome'])) {
     if (!Csrf::verify($_POST['csrf_token'] ?? '')) {
         $error = 'Pedido inválido.';
     } else {
