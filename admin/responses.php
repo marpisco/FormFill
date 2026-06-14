@@ -11,7 +11,6 @@ use FormFill\Lib\Mailer;
 global $db;
 
 $action = $_GET['action'] ?? 'list';
-$brand = Config::brandName();
 
 // ─── Respond to a submission ─────────────────────────────────────────────────
 if ($action === 'respond' && !empty($_POST['resposta_id']) && !empty($_POST['resposta_texto'])) {
