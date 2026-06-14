@@ -16,13 +16,17 @@ $db_config = [
 ];
 
 // SMTP settings for outgoing email
+// Set 'enabled' => false to completely disable email sending (development/testing)
 $smtp_config = [
-    'host'     => 'smtp.example.com',
-    'port'     => 587,
-    'auth'     => true,
-    'security' => 'tls',          // 'tls' or 'ssl'
-    'username' => 'noreply@example.com',
-    'password' => 'CHANGE_ME',
+    'enabled'      => false,                  // false = skip all email sending silently
+    'host'         => 'smtp.example.com',
+    'port'         => 587,
+    'auth'         => true,
+    'security'     => 'tls',                  // 'tls' (STARTTLS) or 'ssl' (SMTPS)
+    'username'     => 'SMTP_LOGIN_USERNAME',  // SMTP authentication login
+    'password'     => 'CHANGE_ME',
+    'from_address' => 'noreply@example.com',  // From: header address (can differ from username)
+    'from_name'    => 'FormFill',             // From: header display name (overridable via DB config 'email_account_name')
 ];
 
 // Microsoft Azure OAuth2 (for "Sign in with Microsoft")

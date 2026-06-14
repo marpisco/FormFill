@@ -4,6 +4,11 @@
  * 
  * PHPMailer wrapper with styled HTML templates.
  * SMTP configuration from src/config.php ($smtp_config).
+ * 
+ * Supports:
+ *   - Disabling SMTP entirely ('enabled' => false)
+ *   - Separate SMTP login (username) vs From header (from_address)
+ *   - Sender name override via DB config 'email_account_name'
  */
 
 namespace FormFill\Lib;
@@ -13,9 +18,27 @@ use PHPMailer\PHPMailer\Exception;
 
 class Mailer
 {
-    private static function createMailer(): PHPMailer
+    /**
+     * Check if email sending is enabled in config.
+     * Returns true if SMTP is disabled, but the caller should handle the no-op.
+     */
+    public static function isEnabled(): bool
     {
         global $smtp_config;
+        return !empty($smtp_config['enabled']);
+    }
+
+    /**
+     * Create a configured PHPMailer instance.
+     * Returns null if SMTP is disabled.
+     */
+    private static function createMailer(): ?PHPMailer
+    {
+        global $smtp_config;
+
+        if (!self::isEnabled()) {
+            return null;
+        }
 
         $mail = new PHPMailer(true);
         $mail->CharSet = 'UTF-8';
@@ -27,8 +50,13 @@ class Mailer
         $mail->Password   = $smtp_config['password'];
         $mail->SMTPSecure = $smtp_config['security'] ?? PHPMailer::ENCRYPTION_STARTTLS;
 
-        $fromName = Config::brandName();
-        $mail->setFrom($smtp_config['username'], $fromName);
+        // From: address — separate from SMTP username
+        $fromAddress = $smtp_config['from_address'] ?? $smtp_config['username'];
+        // From: name — prefer DB config 'email_account_name', fall back to config file, then brand name
+        $fromName = Config::get('email_account_name', null)
+                    ?? $smtp_config['from_name']
+                    ?? Config::brandName();
+        $mail->setFrom($fromAddress, $fromName);
         $mail->isHTML(true);
 
         return $mail;
@@ -36,11 +64,17 @@ class Mailer
 
     /**
      * Send a generic HTML email.
+     * Returns true if sent successfully OR if SMTP is disabled (no-op).
      */
     public static function send(string $to, string $subject, string $htmlBody, ?string $attachment = null): bool
     {
+        $mail = self::createMailer();
+        if ($mail === null) {
+            // SMTP disabled — silently succeed
+            return true;
+        }
+
         try {
-            $mail = self::createMailer();
             $mail->addAddress($to);
             $mail->Subject = $subject;
             $mail->Body    = $htmlBody;
@@ -63,6 +97,10 @@ class Mailer
      */
     public static function sendOtp(string $to, string $code): bool
     {
+        if (!self::isEnabled()) {
+            return true; // SMTP disabled, silently succeed
+        }
+
         $brand = htmlspecialchars(Config::brandName(), ENT_QUOTES, 'UTF-8');
         $subject = "{$brand} — Código de Verificação";
 
@@ -87,6 +125,10 @@ class Mailer
      */
     public static function sendFormConfirmation(string $to, string $nome, string $subject, string $body, string $pdfPath): bool
     {
+        if (!self::isEnabled()) {
+            return true;
+        }
+
         $brand = htmlspecialchars(Config::brandName(), ENT_QUOTES, 'UTF-8');
         $nomeSafe = htmlspecialchars($nome, ENT_QUOTES, 'UTF-8');
         $bodySafe = nl2br(htmlspecialchars($body, ENT_QUOTES, 'UTF-8'));
@@ -110,6 +152,10 @@ class Mailer
      */
     public static function sendResponseNotification(string $to, string $nome, string $resposta, string $pdfPath): bool
     {
+        if (!self::isEnabled()) {
+            return true;
+        }
+
         $brand = htmlspecialchars(Config::brandName(), ENT_QUOTES, 'UTF-8');
         $nomeSafe = htmlspecialchars($nome, ENT_QUOTES, 'UTF-8');
         $respostaSafe = nl2br(htmlspecialchars($resposta, ENT_QUOTES, 'UTF-8'));
