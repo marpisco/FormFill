@@ -122,16 +122,22 @@ if ($action === 'sign' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
                         if ($user) {
                             $nome = explode(' ', $user['nome'])[0];
+                            // Use substitution function for both subject and body
                             $emailBody = $form['email']['confirmacao'] ?? '';
-                            $emailBody = str_replace('#data#', date('d/m/Y'), $emailBody);
-                            $emailBody = str_replace('§nomecompleto§', $user['nome'], $emailBody);
-                            $emailBody = str_replace('§nome§', $nome, $emailBody);
-                            $emailBody = str_replace('§id§', $_SESSION['id'], $emailBody);
-                            $emailBody = str_replace('§email§', $user['email'], $emailBody);
-                            foreach ((array)$fieldValues as $fid => $fval) {
-                                $emailBody = str_replace("&{$fid}&", $fval, $emailBody);
-                            }
-                            Mailer::sendFormConfirmation($user['email'], $nome, $form['email']['assuntoconfirmacao'] ?? 'Confirmação', $emailBody, $signedAbsPath);
+                            $emailSubject = $form['email']['assuntoconfirmacao'] ?? 'Confirmação';
+                            // Manual substitution for signed flow (no $substitute closure in scope)
+                            $sub = function(string $t) use ($user, $nome, $fieldValues): string {
+                                $t = str_replace('#data#', date('d/m/Y'), $t);
+                                $t = str_replace('§nomecompleto§', $user['nome'], $t);
+                                $t = str_replace('§nome§', $nome, $t);
+                                $t = str_replace('§id§', $_SESSION['id'], $t);
+                                $t = str_replace('§email§', $user['email'], $t);
+                                foreach ((array)$fieldValues as $fid => $fval) {
+                                    $t = str_replace("&{$fid}&", (string)$fval, $t);
+                                }
+                                return $t;
+                            };
+                            Mailer::sendFormConfirmation($user['email'], $nome, $sub($emailSubject), $sub($emailBody), $signedAbsPath);
                         }
                     }
 
@@ -258,11 +264,11 @@ if ($action !== 'sign' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST[
             $origName = basename($fileInfo['name']);
             $ext = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
             if (!in_array($ext, $allowedExtensions, true)) {
-                if (!empty($campo['obrigatorio'])) {
-                    $validationErrors[] = "O ficheiro '" . ($campo['descricao'] ?? $campo['idcampo']) . "' tem uma extensão não permitida.";
-                }
+                $validationErrors[] = "O ficheiro '" . ($campo['descricao'] ?? $campo['idcampo']) . "' tem uma extensão não permitida.";
                 continue;
             }
+            // Only move files when all validation has passed
+            if (!empty($validationErrors)) continue;
             $uploadsDir = __DIR__ . '/../data/uploads';
             if (!is_dir($uploadsDir)) mkdir($uploadsDir, 0755, true);
             $storedName = date('Ymd') . '_' . Validator::uuid4() . '_' . $origName;
@@ -325,12 +331,14 @@ if ($action !== 'sign' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST[
 
     // If no signing required, send email immediately
     if (!$requiresSignature && $pdfAbsPath && file_exists($pdfAbsPath)) {
-        $emailBody = $substitute($form['email']['confirmacao'] ?? '');
-        Mailer::sendFormConfirmation($user['email'], $nome, $form['email']['assuntoconfirmacao'] ?? 'Confirmação', $emailBody, $pdfAbsPath);
+                $emailSubject = $substitute($form['email']['assuntoconfirmacao'] ?? 'Confirmação');
+                $emailBody = $substitute($form['email']['confirmacao'] ?? '');
+                Mailer::sendFormConfirmation($user['email'], $nome, $emailSubject, $emailBody, $pdfAbsPath);
     } elseif (!$requiresSignature && !$criarDoc) {
         // No PDF generated — send confirmation without attachment
+        $emailSubject = $substitute($form['email']['assuntoconfirmacao'] ?? 'Confirmação');
         $emailBody = $substitute($form['email']['confirmacao'] ?? '');
-        Mailer::sendFormConfirmation($user['email'], $nome, $form['email']['assuntoconfirmacao'] ?? 'Confirmação', $emailBody, '');
+        Mailer::sendFormConfirmation($user['email'], $nome, $emailSubject, $emailBody, '');
     }
 
     Logger::log("Formulário preenchido: {$form['nome']} [{$formId}]" . ($requiresSignature ? ' (assinatura pendente)' : ''));

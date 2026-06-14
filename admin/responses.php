@@ -113,8 +113,9 @@ if ($action === 'delete' && !empty($_GET['id']) && $_SERVER['REQUEST_METHOD'] ==
         if (is_array($fieldValues)) {
             foreach ($fieldValues as $val) {
                 if (is_string($val) && preg_match('#^(\.\./)?data/uploads/#', $val)) {
-                    $uploadFile = __DIR__ . '/../' . ltrim($val, '/');
-                    if (file_exists($uploadFile)) {
+                    $uploadFile = realpath(__DIR__ . '/../' . ltrim($val, '/'));
+                    $uploadDir = realpath(__DIR__ . '/../data/uploads');
+                    if ($uploadFile && $uploadDir && str_starts_with($uploadFile, $uploadDir . DIRECTORY_SEPARATOR) && file_exists($uploadFile)) {
                         @unlink($uploadFile);
                     }
                 }

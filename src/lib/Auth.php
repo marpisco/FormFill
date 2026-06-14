@@ -512,12 +512,14 @@ class Auth
 
             $db->commit();
             Logger::log("Utilizador pré-registado migrado: {$oldId} → {$newId}");
+            // Return true: migration happened (admin status preserved separately)
+            return true;
         } catch (\Throwable $e) {
             $db->rollback();
             error_log("FormFill migration error: " . $e->getMessage());
         }
 
-        return $wasAdmin;
+        return false;
     }
 
     // ─── TOTP (Time-based One-Time Password) ────────────────────────────────
