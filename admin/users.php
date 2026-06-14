@@ -94,13 +94,14 @@ if ($action === 'delete' && !empty($_GET['id']) && $_SERVER['REQUEST_METHOD'] ==
              . "{$refs['forms']} formulários, {$refs['access']} acessos a formulários.";
         echo "<script>alert(" . json_encode($msg) . "); window.history.back();</script>";
     } else {
-        // Clean up access entries and logs referencing this user
+        // Clean up access entries and set logs user_id to NULL (avoid FK violation)
         $cleanStmt = $db->prepare("DELETE FROM forms_access WHERE user_id = ?");
         if ($cleanStmt) {
             $cleanStmt->bind_param("s", $deleteId);
             $cleanStmt->execute();
             $cleanStmt->close();
         }
+        $db->query("UPDATE logs SET user_id = NULL WHERE user_id = '" . $db->real_escape_string($deleteId) . "'");
         $stmt = $db->prepare("DELETE FROM cache WHERE id = ?");
         if ($stmt) {
             $stmt->bind_param("s", $deleteId);

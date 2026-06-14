@@ -163,7 +163,10 @@ class Auth
         if (!$needsNameSetup || !empty($user['admin'])) {
             // Already set up or already admin — just login
         } elseif (!Config::get('initial_setup_complete')) {
-            // No admin has been claimed yet — atomic first-admin claim via INSERT
+            // No admin claimed yet — check if this is the first named user
+            $countStmt = $db->query("SELECT COUNT(*) as cnt FROM cache WHERE nome IS NOT NULL AND nome != ''");
+            $namedUsers = (int)$countStmt->fetch_assoc()['cnt'];
+            if ($namedUsers == 0) {
             $claimStmt = $db->prepare(
                 "INSERT INTO config (config_key, config_value) VALUES ('first_user_admin_id', ?) 
                  ON DUPLICATE KEY UPDATE config_value = config_value"
@@ -186,6 +189,7 @@ class Auth
                 $user['admin'] = true;
             }
         }
+            } // end if ($namedUsers == 0)
 
         if ($needsNameSetup) {
             // Store partial auth in session for name setup
@@ -366,8 +370,10 @@ class Auth
 
                 $user = ['id' => $userId, 'nome' => $displayName, 'email' => $email, 'admin' => $migrated, 'totp_secret' => null];
 
-                // Race-safe first-user admin claim (gated on no existing admin claim)
+                // Race-safe first-user admin claim (gated on no existing named users)
                 if (!$migrated && !Config::get('initial_setup_complete')) {
+                    $countStmt = $db->query("SELECT COUNT(*) as cnt FROM cache WHERE nome IS NOT NULL AND nome != ''");
+                    if ((int)$countStmt->fetch_assoc()['cnt'] == 0) {
                     $claimStmt = $db->prepare(
                         "INSERT INTO config (config_key, config_value) VALUES ('first_user_admin_id', ?) 
                          ON DUPLICATE KEY UPDATE config_value = config_value"
@@ -387,6 +393,7 @@ class Auth
                         }
                         $claimStmt->close();
                     }
+                    } // end if (namedUsers == 0)
                 }
             }
 
@@ -483,7 +490,15 @@ class Auth
                 $updateStmt3->close();
             }
 
-            // 6. Delete old record (no more FK references)
+            // 6. Update foreign keys in forms (created_by)
+            $updateStmt4 = $db->prepare("UPDATE forms SET criado_por = ? WHERE criado_por = ?");
+            if ($updateStmt4) {
+                $updateStmt4->bind_param("ss", $newId, $oldId);
+                $updateStmt4->execute();
+                $updateStmt4->close();
+            }
+
+            // 7. Delete old record (no more FK references)
             $deleteStmt = $db->prepare("DELETE FROM cache WHERE id = ?");
             if ($deleteStmt) {
                 $deleteStmt->bind_param("s", $oldId);
@@ -498,7 +513,8 @@ class Auth
             error_log("FormFill migration error: " . $e->getMessage());
         }
 
-        return $wasAdmin;
+        // Return true if migration happened (regardless of admin status)
+        return true;
     }
 
     // ─── TOTP (Time-based One-Time Password) ────────────────────────────────

@@ -17,6 +17,17 @@ if ($action === 'respond' && !empty($_POST['resposta_id']) && !empty($_POST['res
     $respostaId = $_POST['resposta_id'];
     $texto = trim($_POST['resposta_texto']);
 
+    // Reject respond on signing-pending responses
+    $check = $db->prepare("SELECT signing_pending FROM respostas WHERE id = ?");
+    $check->bind_param("s", $respostaId);
+    $check->execute();
+    $sp = $check->get_result()->fetch_assoc();
+    $check->close();
+    if ($sp && !empty($sp['signing_pending'])) {
+        acaoexecutada("Não é possível responder — assinatura pendente");
+        exit();
+    }
+
     // Get user email, PDF, and form notification template
     $stmt = $db->prepare(
         "SELECT r.pdf_path, r.form_id, c.email, c.nome, c.id AS user_id, f.email AS form_email
@@ -63,7 +74,7 @@ if ($action === 'respond' && !empty($_POST['resposta_id']) && !empty($_POST['res
         }
     }
 
-    acaoexecutada($emailSent ? "Resposta enviada ao utilizador" : (!$hasEmail ? "Resposta registada (sem email)" : "Resposta registada (email não enviado)"));
+    acaoexecutada($emailSent ? "Resposta enviada ao utilizador" : (!$hasEmail ? "Resposta registada (sem email)" : "Email não enviado — resposta não guardada"));
 }
 
 // ─── Delete response ─────────────────────────────────────────────────────────
@@ -228,7 +239,9 @@ $formsList = $db->query("SELECT id, nome FROM forms ORDER BY nome");
                 <td class="px-4 py-3 text-slate-600 dark:text-slate-300 hidden sm:table-cell"><?= htmlspecialchars($r['user_nome']) ?></td>
                 <td class="px-4 py-3 text-slate-500 hidden md:table-cell"><?= date('d/m/Y H:i', strtotime($r['criado_em'] ?? '')) ?></td>
                 <td class="px-4 py-3">
-                    <?php if ($r['respondido']): ?>
+                    <?php if (!empty($r['signing_pending'])): ?>
+                    <span class="text-xs text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 px-2 py-0.5 rounded-full">Assinatura pendente</span>
+                    <?php elseif ($r['respondido']): ?>
                     <span class="text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded-full">Respondido</span>
                     <?php else: ?>
                     <span class="text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 rounded-full">Pendente</span>
@@ -240,9 +253,14 @@ $formsList = $db->query("SELECT id, nome FROM forms ORDER BY nome");
                         <a href="/<?= htmlspecialchars($r['pdf_path']) ?>" target="_blank"
                            class="px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition">PDF</a>
                         <?php endif; ?>
-                        <?php if (!$r['respondido']): ?>
+                        <?php if (!$r['respondido'] && empty($r['signing_pending'])): ?>
                         <button onclick="showRespondForm('<?= htmlspecialchars($r['id']) ?>', <?= json_encode($r['user_nome'], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>)"
                                 class="px-2 py-1 text-xs text-brand-600 dark:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/20 rounded transition">Responder</button>
+                        <?php endif; ?>
+                        <?php if (!empty($r['dados']) && $r['dados'] !== 'null'): ?>
+                        <button onclick="this.nextElementSibling.classList.toggle('hidden')"
+                                class="px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition">Dados</button>
+                        <pre class="hidden mt-1 text-xs text-slate-500 dark:text-slate-400 max-h-20 overflow-y-auto bg-slate-50 dark:bg-slate-900 p-2 rounded"><?= htmlspecialchars(json_encode(json_decode($r['dados'], true), JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre>
                         <?php endif; ?>
                         <form method="POST" action="?action=delete&id=<?= urlencode($r['id']) ?>" class="inline" onsubmit="return confirm('Eliminar esta resposta?')">
                             <?= Csrf::field() ?>

@@ -59,8 +59,10 @@ if ($action === 'sign' && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 file_put_contents($tmpData, $signedData);
                 // Verify CMS signature against signed data
                 $sigOut = $tmpCms . '.out';
-                $isSigned = @openssl_cms_verify($tmpData, OPENSSL_CMS_NOVERIFY, null, [], $tmpCms) 
-                         || @openssl_pkcs7_verify($tmpData, PKCS7_NOVERIFY, $sigOut, [], $tmpCms);
+                // CMS verification: input = CMS data, content = detached signed data
+                $isSigned = @openssl_cms_verify($tmpCms, OPENSSL_CMS_NOVERIFY, null, [], null, $tmpData)
+                    // PKCS7 fallback: input = CMS data, content = detached signed data
+                         || @openssl_pkcs7_verify($tmpCms, PKCS7_NOVERIFY, $sigOut, [], null, $tmpData);
                 @unlink($tmpData);
                 @unlink($tmpCms);
                 @unlink($sigOut);
@@ -160,7 +162,7 @@ if ($action !== 'sign' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST[
 
     $formId = $_POST['form_id'];
     $form = FormBuilder::get($formId);
-    if (!$form || !FormBuilder::canAccess($formId, $_SESSION['id'])) {
+    if (!$form || (empty($_SESSION['admin']) && !FormBuilder::canAccess($formId, $_SESSION['id']))) {
         http_response_code(404);
         die("Formulário não encontrado.");
     }
@@ -224,11 +226,6 @@ if ($action !== 'sign' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST[
         $fieldValues[$idcampo] = $v;
     }
 
-    if (!empty($validationErrors)) {
-        http_response_code(400);
-        die("Erros de validação:\n" . implode("\n", $validationErrors));
-    }
-
     $substitute = function(string $t) use ($nomeCompleto, $nome, $user, $fieldValues): string {
         $t = str_replace('#data#', date('d/m/Y'), $t);
         $t = str_replace('§nomecompleto§', $nomeCompleto, $t);
@@ -287,13 +284,16 @@ if ($action !== 'sign' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST[
             $fileInfo = $_FILES[$campo['idcampo']];
             // Validate upload succeeded
             if (($fileInfo['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+                if (!empty($campo['obrigatorio'])) {
+                    $validationErrors[] = "O ficheiro '" . ($campo['descricao'] ?? $campo['idcampo']) . "' não foi enviado corretamente.";
+                }
                 continue;
             }
             $origName = basename($fileInfo['name']);
             $ext = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
             if (!in_array($ext, $allowedExtensions, true)) {
                 if (!empty($campo['obrigatorio'])) {
-                    $validationErrors[] = "O ficheiro '" . ($campo['descricao'] ?? $idcampo) . "' tem uma extensão não permitida.";
+                    $validationErrors[] = "O ficheiro '" . ($campo['descricao'] ?? $campo['idcampo']) . "' tem uma extensão não permitida.";
                 }
                 continue;
             }
@@ -302,10 +302,16 @@ if ($action !== 'sign' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST[
             $storedName = date('Ymd') . '_' . Validator::uuid4() . '_' . $origName;
             $destPath = $uploadsDir . '/' . $storedName;
             if (move_uploaded_file($fileInfo['tmp_name'], $destPath)) {
-                // Store path relative to project root (admin cleanup resolves with __DIR__ . '/../')
                 $fieldValues[$campo['idcampo']] = '../data/uploads/' . $storedName;
+            } elseif (!empty($campo['obrigatorio'])) {
+                $validationErrors[] = "Erro ao guardar o ficheiro '" . ($campo['descricao'] ?? $campo['idcampo']) . "'.";
             }
         }
+    }
+
+    if (!empty($validationErrors)) {
+        http_response_code(400);
+        die("Erros de validação:\n" . implode("\n", $validationErrors));
     }
 
     $respostaId = Validator::uuid4();

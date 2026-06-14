@@ -240,15 +240,26 @@ class FormBuilder
         global $db;
 
         // Delete associated PDF files
-        $stmt = $db->prepare("SELECT pdf_path FROM respostas WHERE form_id = ? AND pdf_path IS NOT NULL AND pdf_path != ''");
+        $stmt = $db->prepare("SELECT pdf_path, dados FROM respostas WHERE form_id = ? AND (pdf_path IS NOT NULL AND pdf_path != '') OR dados IS NOT NULL");
         if ($stmt) {
             $stmt->bind_param("s", $id);
             $stmt->execute();
-            $pdfResult = $stmt->get_result();
-            while ($row = $pdfResult->fetch_assoc()) {
-                $pdfFile = __DIR__ . '/../../' . ltrim($row['pdf_path'], '/');
-                if (file_exists($pdfFile)) {
-                    @unlink($pdfFile);
+            $result = $stmt->get_result();
+            while ($row = $result->fetch_assoc()) {
+                if ($row['pdf_path'] && $row['pdf_path'] !== '') {
+                    $pdfFile = __DIR__ . '/../../' . ltrim($row['pdf_path'], '/');
+                    if (file_exists($pdfFile)) @unlink($pdfFile);
+                }
+                if ($row['dados']) {
+                    $fieldValues = json_decode($row['dados'], true);
+                    if (is_array($fieldValues)) {
+                        foreach ($fieldValues as $val) {
+                            if (is_string($val) && preg_match('#^(\.\./)?data/uploads/#', $val)) {
+                                $uploadFile = __DIR__ . '/../../' . ltrim($val, '/');
+                                if (file_exists($uploadFile)) @unlink($uploadFile);
+                            }
+                        }
+                    }
                 }
             }
             $stmt->close();
