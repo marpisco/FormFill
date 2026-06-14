@@ -38,8 +38,11 @@ class Config
         $result = $stmt->get_result();
 
         if ($row = $result->fetch_assoc()) {
-            $decoded = json_decode($row['config_value'], true);
-            $value = (json_last_error() === JSON_ERROR_NONE) ? $decoded : $row['config_value'];
+            $raw = $row['config_value'];
+            $decoded = json_decode($raw, true);
+            // Only use decoded value if it's not a string (meaning it was stored as JSON).
+            // String values like brand names must be returned as-is.
+            $value = (json_last_error() === JSON_ERROR_NONE && !is_string($decoded)) ? $decoded : $raw;
             self::$cache[$key] = $value;
             $stmt->close();
             return $value;

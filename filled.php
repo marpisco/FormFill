@@ -49,26 +49,32 @@ if ($action === 'sign' && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 $isSigned = true;
             }
             @unlink($sigPath);
-            if (!$isSigned && $hasSig) {
-                $isSigned = true; // Signature structure detected
-            }
         }
 
         if ($isSigned) {
-            $stmt = $db->prepare("SELECT pdf_path, form_id FROM respostas WHERE id = ? AND enviador_id = ?");
+            // Verify the response exists, belongs to user, and the form requires signing
+            $stmt = $db->prepare(
+                "SELECT r.pdf_path, r.form_id, r.respondido 
+                 FROM respostas r JOIN forms f ON r.form_id = f.id 
+                 WHERE r.id = ? AND r.enviador_id = ? AND f.requires_signature = TRUE"
+            );
             $stmt->bind_param("ss", $respostaId, $_SESSION['id']);
             $stmt->execute();
             $existing = $stmt->get_result()->fetch_assoc();
             $stmt->close();
 
-            if ($existing) {
-                $signedRelPath = 'filledforms/' . date('YmdHisv') . '_signed.pdf';
+            if (!$existing) {
+                $signError = 'Este formulário não requer assinatura digital ou a resposta não foi encontrada.';
+            } elseif (!empty($existing['respondido'])) {
+                $signError = 'Este formulário já foi submetido e não pode ser alterado.';
+            } else {
+                $signedRelPath = 'filledforms/' . date('Ymd') . '_' . Validator::uuid4() . '_signed.pdf';
                 $signedAbsPath = __DIR__ . '/' . $signedRelPath;
 
                 if (move_uploaded_file($uploadedPath, $signedAbsPath)) {
                     $db->query("UPDATE respostas SET pdf_path = '" . $db->real_escape_string($signedRelPath) . "', respondido = FALSE WHERE id = '" . $db->real_escape_string($respostaId) . "'");
 
-                    // Now send confirmation email
+                    // Send confirmation email with full placeholder substitution
                     $form = FormBuilder::get($existing['form_id']);
                     if ($form) {
                         $uStmt = $db->prepare("SELECT nome, email FROM cache WHERE id = ?");
@@ -79,7 +85,12 @@ if ($action === 'sign' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
                         if ($user) {
                             $nome = explode(' ', $user['nome'])[0];
-                            $emailBody = str_replace(['§nomecompleto§', '§nome§', '#data#'], [$user['nome'], $nome, date('d/m/Y')], $form['email']['confirmacao'] ?? '');
+                            $emailBody = $form['email']['confirmacao'] ?? '';
+                            // Full substitution matching the main submission flow
+                            $emailBody = str_replace('#data#', date('d/m/Y'), $emailBody);
+                            $emailBody = str_replace('§nomecompleto§', $user['nome'], $emailBody);
+                            $emailBody = str_replace('§nome§', $nome, $emailBody);
+                            $emailBody = str_replace('§id§', $user['email'] ?? '', $emailBody);
                             Mailer::sendFormConfirmation($user['email'], $nome, $form['email']['assuntoconfirmacao'] ?? 'Confirmação', $emailBody, $signedAbsPath);
                         }
                     }
@@ -116,6 +127,12 @@ if ($action !== 'sign' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST[
         die("Formulário não encontrado.");
     }
 
+    // Reject submissions for disabled forms
+    if (empty($form['ativado'])) {
+        http_response_code(403);
+        die("Este formulário não está ativo.");
+    }
+
     $requiresSignature = !empty($form['requires_signature']);
 
     $stmt = $db->prepare("SELECT id, nome, email FROM cache WHERE id = ?");
@@ -128,10 +145,29 @@ if ($action !== 'sign' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST[
     $nome = explode(' ', $nomeCompleto)[0];
 
     $fieldValues = [];
+    $validationErrors = [];
     foreach ($form['campos'] as $campo) {
-        $v = $_POST[$campo['idcampo']] ?? '';
-        if (is_array($v)) $v = implode(', ', $v);
-        $fieldValues[$campo['idcampo']] = $v;
+        $idcampo = $campo['idcampo'];
+        $tipo = $campo['tipo'] ?? 'text';
+        $v = '';
+
+        if ($tipo === 'file') {
+            $v = $_FILES[$idcampo]['name'] ?? '';
+        } else {
+            $v = $_POST[$idcampo] ?? '';
+            if (is_array($v)) $v = implode(', ', $v);
+        }
+
+        // Server-side validation of required fields
+        if (!empty($campo['obrigatorio']) && (is_string($v) ? trim($v) === '' : empty($v))) {
+            $validationErrors[] = "O campo '" . ($campo['descricao'] ?? $idcampo) . "' é obrigatório.";
+        }
+        $fieldValues[$idcampo] = $v;
+    }
+
+    if (!empty($validationErrors)) {
+        http_response_code(400);
+        die("Erros de validação:\n" . implode("\n", $validationErrors));
     }
 
     $substitute = function(string $t) use ($nomeCompleto, $nome, $user, $fieldValues): string {
@@ -164,7 +200,7 @@ if ($action !== 'sign' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST[
                 $this->Cell(0, 10, self::enc($titulo), 0, 1, 'C'); $this->Ln(5);
                 $this->SetFont('Arial', '', 12);
                 $this->MultiCell(0, 8, self::enc($texto), 0, 'J');
-                $rp = 'filledforms/' . date('YmdHisv') . '.pdf';
+                $rp = 'filledforms/' . date('Ymd') . '_' . Validator::uuid4() . '.pdf';
                 $this->Output('F', __DIR__ . '/' . $rp);
                 return $rp;
             }
@@ -182,15 +218,19 @@ if ($action !== 'sign' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST[
     $respostaId = Validator::uuid4();
     $stmt = $db->prepare("INSERT INTO respostas (id, form_id, enviador_id, pdf_path, respondido) VALUES (?, ?, ?, ?, FALSE)");
     if ($stmt) {
-        $stmt->bind_param("ssss", $respostaId, $formId, $_SESSION['id'], $pdfRelPath);
+        $stmt->bind_param("ssss", $respostaId, $formId, $_SESSION['id'], $pdfRelPath ?? '');
         $stmt->execute();
         $stmt->close();
     }
 
-    // If no signing required, send email immediately
+    // If no signing required, send email immediately (only if PDF was generated)
     if (!$requiresSignature && $pdfAbsPath && file_exists($pdfAbsPath)) {
         $emailBody = $substitute($form['email']['confirmacao'] ?? '');
         Mailer::sendFormConfirmation($user['email'], $nome, $form['email']['assuntoconfirmacao'] ?? 'Confirmação', $emailBody, $pdfAbsPath);
+    } elseif (!$requiresSignature && !$criarDoc) {
+        // No PDF generated — send confirmation without attachment
+        $emailBody = $substitute($form['email']['confirmacao'] ?? '');
+        Mailer::sendFormConfirmation($user['email'], $nome, $form['email']['assuntoconfirmacao'] ?? 'Confirmação', $emailBody, '');
     }
 
     Logger::log("Formulário preenchido: {$form['nome']} [{$formId}]" . ($requiresSignature ? ' (assinatura pendente)' : ''));

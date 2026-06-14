@@ -64,6 +64,9 @@ class Auth
             $stmt->close();
         }
 
+        // Clear any previous verify_code rate limit so the new code can be tried
+        RateLimit::clearUser('verify_code', $userId);
+
         // Send email
         $sent = Mailer::sendOtp($email, $code);
         if (!$sent) {
@@ -148,27 +151,33 @@ class Auth
         if (!$needsNameSetup || !empty($user['admin'])) {
             // Already set up or already admin — just login
         } else {
-            // New user — check if they should be first admin
-            $countStmt = $db->query("SELECT COUNT(*) as cnt FROM cache WHERE nome IS NOT NULL AND nome != ''");
-            $existingUsers = $countStmt->fetch_assoc()['cnt'];
+            // New user — atomic check if they should be first admin
+            $db->begin_transaction();
+            try {
+                $countStmt = $db->query("SELECT COUNT(*) as cnt FROM cache WHERE nome IS NOT NULL AND nome != '' FOR UPDATE");
+                $existingUsers = $countStmt->fetch_assoc()['cnt'];
 
-            if ($existingUsers == 0) {
-                $claimStmt = $db->prepare(
-                    "INSERT INTO config (config_key, config_value) VALUES ('first_user_admin_id', ?) 
-                     ON DUPLICATE KEY UPDATE config_value = config_value"
-                );
-                if ($claimStmt) {
-                    $claimStmt->bind_param("s", $user['id']);
-                    $claimStmt->execute();
-                    $claimedAdmin = $claimStmt->affected_rows === 1;
-                    $claimStmt->close();
-                }
+                if ($existingUsers == 0) {
+                    $claimStmt = $db->prepare(
+                        "INSERT INTO config (config_key, config_value) VALUES ('first_user_admin_id', ?) 
+                         ON DUPLICATE KEY UPDATE config_value = config_value"
+                    );
+                    if ($claimStmt) {
+                        $claimStmt->bind_param("s", $user['id']);
+                        $claimStmt->execute();
+                        $claimedAdmin = $claimStmt->affected_rows === 1;
+                        $claimStmt->close();
+                    }
 
-                if ($claimedAdmin) {
-                    $db->query("UPDATE cache SET admin = TRUE WHERE id = '" . $db->real_escape_string($user['id']) . "'");
-                    Config::set('initial_setup_complete', 'true');
-                    $user['admin'] = true;
+                    if ($claimedAdmin) {
+                        $db->query("UPDATE cache SET admin = TRUE WHERE id = '" . $db->real_escape_string($user['id']) . "'");
+                        Config::set('initial_setup_complete', 'true');
+                        $user['admin'] = true;
+                    }
                 }
+                $db->commit();
+            } catch (\Throwable $e) {
+                $db->rollback();
             }
         }
 
@@ -340,25 +349,31 @@ class Auth
 
                 $user = ['id' => $userId, 'nome' => $displayName, 'email' => $email, 'admin' => $migrated, 'totp_secret' => null];
 
-                // Race-safe first-user admin claim
+                // Race-safe first-user admin claim (atomic INSERT gates the race)
                 if (!$migrated) {
-                    $countStmt = $db->query("SELECT COUNT(*) as cnt FROM cache WHERE nome IS NOT NULL AND nome != ''");
-                    $existingUsers = $countStmt->fetch_assoc()['cnt'];
-                    if ($existingUsers <= 1) { // Just this user
-                        $claimStmt = $db->prepare(
-                            "INSERT INTO config (config_key, config_value) VALUES ('first_user_admin_id', ?) 
-                             ON DUPLICATE KEY UPDATE config_value = config_value"
-                        );
-                        if ($claimStmt) {
-                            $claimStmt->bind_param("s", $userId);
-                            $claimStmt->execute();
-                            if ($claimStmt->affected_rows === 1) {
-                                $db->query("UPDATE cache SET admin = TRUE WHERE id = '" . $db->real_escape_string($userId) . "'");
-                                Config::set('initial_setup_complete', 'true');
-                                $user['admin'] = true;
+                    $db->begin_transaction();
+                    try {
+                        $countStmt = $db->query("SELECT COUNT(*) as cnt FROM cache WHERE nome IS NOT NULL AND nome != '' FOR UPDATE");
+                        $existingUsers = $countStmt->fetch_assoc()['cnt'];
+                        if ($existingUsers <= 1) { // Just this user (or none)
+                            $claimStmt = $db->prepare(
+                                "INSERT INTO config (config_key, config_value) VALUES ('first_user_admin_id', ?) 
+                                 ON DUPLICATE KEY UPDATE config_value = config_value"
+                            );
+                            if ($claimStmt) {
+                                $claimStmt->bind_param("s", $userId);
+                                $claimStmt->execute();
+                                if ($claimStmt->affected_rows === 1) {
+                                    $db->query("UPDATE cache SET admin = TRUE WHERE id = '" . $db->real_escape_string($userId) . "'");
+                                    Config::set('initial_setup_complete', 'true');
+                                    $user['admin'] = true;
+                                }
+                                $claimStmt->close();
                             }
-                            $claimStmt->close();
                         }
+                        $db->commit();
+                    } catch (\Throwable $e) {
+                        $db->rollback();
                     }
                 }
             }
@@ -410,13 +425,20 @@ class Auth
         $oldId = $oldUser['id'];
         $wasAdmin = !empty($oldUser['admin']);
 
-        // Atomic migration
+        // Atomic migration: delete old record first so UNIQUE(email) allows the new insert
         $db->begin_transaction();
         try {
-            // 1. Insert new OAuth record
+            // 1. Delete old pre-registered record (frees the email UNIQUE constraint)
+            $deleteStmt = $db->prepare("DELETE FROM cache WHERE id = ?");
+            if ($deleteStmt) {
+                $deleteStmt->bind_param("s", $oldId);
+                $deleteStmt->execute();
+                $deleteStmt->close();
+            }
+
+            // 2. Insert new OAuth record
             $insertStmt = $db->prepare(
-                "INSERT INTO cache (id, nome, email, admin) VALUES (?, ?, ?, ?) 
-                 ON DUPLICATE KEY UPDATE nome = VALUES(nome), admin = admin OR VALUES(admin)"
+                "INSERT INTO cache (id, nome, email, admin) VALUES (?, ?, ?, ?)"
             );
             if ($insertStmt) {
                 $insertStmt->bind_param("sssi", $newId, $displayName, $email, $wasAdmin);
@@ -424,7 +446,7 @@ class Auth
                 $insertStmt->close();
             }
 
-            // 2. Update foreign keys in respostas
+            // 3. Update foreign keys in respostas
             $updateStmt = $db->prepare("UPDATE respostas SET enviador_id = ? WHERE enviador_id = ?");
             if ($updateStmt) {
                 $updateStmt->bind_param("ss", $newId, $oldId);
@@ -432,20 +454,12 @@ class Auth
                 $updateStmt->close();
             }
 
-            // 3. Update foreign keys in logs
+            // 4. Update foreign keys in logs
             $updateStmt2 = $db->prepare("UPDATE logs SET user_id = ? WHERE user_id = ?");
             if ($updateStmt2) {
                 $updateStmt2->bind_param("ss", $newId, $oldId);
                 $updateStmt2->execute();
                 $updateStmt2->close();
-            }
-
-            // 4. Delete old record
-            $deleteStmt = $db->prepare("DELETE FROM cache WHERE id = ?");
-            if ($deleteStmt) {
-                $deleteStmt->bind_param("s", $oldId);
-                $deleteStmt->execute();
-                $deleteStmt->close();
             }
 
             $db->commit();
@@ -520,6 +534,7 @@ class Auth
             $user = $userStmt->get_result()->fetch_assoc();
             $userStmt->close();
             if ($user) {
+                $_SESSION['totp_verified'] = true;
                 self::login($user, !empty($user['admin']));
             }
         }

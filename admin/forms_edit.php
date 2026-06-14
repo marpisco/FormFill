@@ -72,7 +72,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_form'])) {
         } else {
             $formId = FormBuilder::create($data);
             acaoexecutada("Formulário criado");
-            header("Location: /admin/forms_edit.php?id=" . urlencode($formId));
+            echo "<script>window.location.href='/admin/forms_edit.php?id=" . urlencode($formId) . "';</script>";
+            echo "</main></body></html>";
             exit();
         }
     } else {

@@ -77,8 +77,10 @@ $campos = $form['campos'] ?? [];
             <?php foreach ($campos as $campo): ?>
                 <?php
                 $tipo = $campo['tipo'] ?? 'text';
-                // Skip hidden fields from rendering (they're for internal use)
-                if ($tipo === 'hidden') continue;
+                // Render hidden fields as <input type="hidden">
+                if ($tipo === 'hidden'): ?>
+                <input type="hidden" name="<?= htmlspecialchars($campo['idcampo']) ?>" value="<?= htmlspecialchars($campo['placeholder'] ?? '') ?>">
+                <?php continue; endif;
                 ?>
                 <div>
                     <label for="field_<?= htmlspecialchars($campo['idcampo']) ?>" 

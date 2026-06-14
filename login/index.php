@@ -16,9 +16,10 @@ use FormFill\Lib\Auth;
 use FormFill\Lib\Config;
 use FormFill\Lib\RateLimit;
 
-// Redirect if already logged in (unless doing OAuth callback)
+// Redirect if already logged in (unless doing OAuth callback or logout)
 $isCallback = isset($_GET['code']) && isset($_GET['state']);
-if (!$isCallback && isset($_SESSION['id']) && Session::isValid()) {
+$isLogout = ($_GET['step'] ?? '') === 'logout';
+if (!$isCallback && !$isLogout && isset($_SESSION['id']) && Session::isValid()) {
     header('Location: /');
     exit();
 }

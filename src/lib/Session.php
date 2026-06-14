@@ -131,6 +131,21 @@ class Session
             // Avoid redirect loop when already on the login page
             $currentPath = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?: '/';
             if (!str_starts_with($currentPath, '/login')) {
+                // Check if user has TOTP secret — if not, set up enrollment
+                global $db;
+                if (isset($db) && !$db->connect_error) {
+                    $stmt = $db->prepare("SELECT totp_secret FROM cache WHERE id = ?");
+                    if ($stmt) {
+                        $stmt->bind_param("s", $_SESSION['id']);
+                        $stmt->execute();
+                        $row = $stmt->get_result()->fetch_assoc();
+                        $stmt->close();
+                        if (!$row || empty($row['totp_secret'])) {
+                            $_SESSION['pending_totp_setup'] = $_SESSION['id'];
+                            $_SESSION['pending_totp_email'] = $_SESSION['email'] ?? '';
+                        }
+                    }
+                }
                 header('Location: /login?step=totp');
                 exit();
             }

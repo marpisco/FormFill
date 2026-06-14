@@ -17,33 +17,51 @@ if ($action === 'respond' && !empty($_POST['resposta_id']) && !empty($_POST['res
     $respostaId = $_POST['resposta_id'];
     $texto = trim($_POST['resposta_texto']);
 
-    // Get user email and send notification first (so response is not marked if email fails)
+    // Get user email, PDF, and form notification template
     $stmt = $db->prepare(
-        "SELECT r.pdf_path, r.form_id, c.email, c.nome 
-         FROM respostas r JOIN cache c ON r.enviador_id = c.id 
+        "SELECT r.pdf_path, r.form_id, c.email, c.nome, f.email AS form_email
+         FROM respostas r 
+         JOIN cache c ON r.enviador_id = c.id 
+         JOIN forms f ON r.form_id = f.id
          WHERE r.id = ?"
     );
     $emailSent = false;
+    $hasEmail = false;
     if ($stmt) {
         $stmt->bind_param("s", $respostaId);
         $stmt->execute();
         $row = $stmt->get_result()->fetch_assoc();
         $stmt->close();
 
-        if ($row && !empty($row['email'])) {
-            $emailSent = Mailer::sendResponseNotification($row['email'], $row['nome'], $texto, $row['pdf_path'] ?? null);
+        if ($row) {
+            $hasEmail = !empty($row['email']);
+            if ($hasEmail) {
+                // If the form has notification templates, use them as response template overrides
+                $formEmail = $row['form_email'] ? json_decode($row['form_email'], true) : null;
+                if ($formEmail && !empty($formEmail['assuntonotificacao'])) {
+                    Config::set('admin_response_subject', $formEmail['assuntonotificacao']);
+                }
+                if ($formEmail && !empty($formEmail['notificacao'])) {
+                    Config::set('admin_response_body', $formEmail['notificacao']);
+                }
+
+                $pdfAbsPath = $row['pdf_path'] ? __DIR__ . '/../' . ltrim($row['pdf_path'], '/') : null;
+                $emailSent = Mailer::sendResponseNotification($row['email'], $row['nome'], $texto, $pdfAbsPath ?? '');
+            }
         }
     }
 
-    // Mark as responded (after email attempt)
-    $stmt = $db->prepare("UPDATE respostas SET respondido = TRUE, resposta = ? WHERE id = ?");
-    if ($stmt) {
-        $stmt->bind_param("ss", $texto, $respostaId);
-        $stmt->execute();
-        $stmt->close();
+    // Only mark as responded if email sent successfully (or user has no email address)
+    if ($emailSent || !$hasEmail) {
+        $stmt = $db->prepare("UPDATE respostas SET respondido = TRUE, resposta = ? WHERE id = ?");
+        if ($stmt) {
+            $stmt->bind_param("ss", $texto, $respostaId);
+            $stmt->execute();
+            $stmt->close();
+        }
     }
 
-    acaoexecutada($emailSent ? "Resposta enviada ao utilizador" : "Resposta registada (email não enviado)");
+    acaoexecutada($emailSent ? "Resposta enviada ao utilizador" : (!$hasEmail ? "Resposta registada (sem email)" : "Resposta registada (email não enviado)"));
 }
 
 // ─── Delete response ─────────────────────────────────────────────────────────

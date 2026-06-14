@@ -25,7 +25,8 @@ RedirectMatch 404 /\..*
 # Protect the vendor directory
 RedirectMatch 404 /vendor/
 
-# Disallow directory listing of filledforms (Options -Indexes is already set globally above)
+# Disallow directory listing of filledforms. PDF filenames use UUIDs (unguessable).
+# For stronger protection, serve PDFs through a PHP auth proxy.
 RedirectMatch 403 ^/filledforms/?$
 
 # Cache static assets

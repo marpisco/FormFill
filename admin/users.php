@@ -35,19 +35,46 @@ if ($action === 'remove_totp' && !empty($_GET['id']) && $_SERVER['REQUEST_METHOD
 
 // Delete user
 if ($action === 'delete' && !empty($_GET['id']) && $_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Check for existing responses
+    $deleteId = $_GET['id'];
+
+    // Check all FK references before deletion
+    $refs = [];
     $check = $db->prepare("SELECT COUNT(*) as c FROM respostas WHERE enviador_id = ?");
-    $check->bind_param("s", $_GET['id']);
+    $check->bind_param("s", $deleteId);
     $check->execute();
-    $count = $check->get_result()->fetch_assoc()['c'];
+    $refs['respostas'] = (int)$check->get_result()->fetch_assoc()['c'];
     $check->close();
 
-    if ($count > 0) {
-        echo "<script>alert('Não é possível eliminar: utilizador tem {$count} respostas.'); window.history.back();</script>";
+    $check = $db->prepare("SELECT COUNT(*) as c FROM forms WHERE criado_por = ?");
+    $check->bind_param("s", $deleteId);
+    $check->execute();
+    $refs['forms'] = (int)$check->get_result()->fetch_assoc()['c'];
+    $check->close();
+
+    $check = $db->prepare("SELECT COUNT(*) as c FROM logs WHERE user_id = ?");
+    $check->bind_param("s", $deleteId);
+    $check->execute();
+    $refs['logs'] = (int)$check->get_result()->fetch_assoc()['c'];
+    $check->close();
+
+    $check = $db->prepare("SELECT COUNT(*) as c FROM forms_access WHERE user_id = ?");
+    $check->bind_param("s", $deleteId);
+    $check->execute();
+    $refs['access'] = (int)$check->get_result()->fetch_assoc()['c'];
+    $check->close();
+
+    $totalRefs = array_sum($refs);
+    if ($totalRefs > 0) {
+        $msg = "Não é possível eliminar: utilizador tem {$refs['respostas']} respostas, "
+             . "{$refs['forms']} formulários, {$refs['logs']} registos de log, "
+             . "{$refs['access']} acessos a formulários.";
+        echo "<script>alert(" . json_encode($msg) . "); window.history.back();</script>";
     } else {
+        // Clean up access entries and logs referencing this user
+        $db->query("DELETE FROM forms_access WHERE user_id = '" . $db->real_escape_string($deleteId) . "'");
         $stmt = $db->prepare("DELETE FROM cache WHERE id = ?");
         if ($stmt) {
-            $stmt->bind_param("s", $_GET['id']);
+            $stmt->bind_param("s", $deleteId);
             $stmt->execute();
             $stmt->close();
         }
