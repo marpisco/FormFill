@@ -13,7 +13,8 @@ $action = $_GET['action'] ?? 'view';
 if ($action === 'save' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $fields = [
         'brand_name', 'internal_email_domain', 'admin_requires_totp',
-        'blocked_emails_regex', 'email_account_name', 'app_mode', 'trusted_proxies'
+        'blocked_emails_regex', 'email_account_name', 'app_mode', 'trusted_proxies',
+        'admin_response_subject', 'admin_response_body'
     ];
 
     foreach ($fields as $field) {
@@ -56,6 +57,22 @@ if ($action === 'save' && $_SERVER['REQUEST_METHOD'] === 'POST') {
             <input type="text" name="email_account_name" value="<?= htmlspecialchars(Config::get('email_account_name', 'FormFill')) ?>"
                    class="w-full px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent">
             <p class="text-xs text-slate-400 mt-1">Nome exibido no remetente dos emails.</p>
+        </div>
+
+        <div>
+            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Assunto do email de resposta</label>
+            <input type="text" name="admin_response_subject" value="<?= htmlspecialchars(Config::get('admin_response_subject', '')) ?>"
+                   placeholder="§brand§ — Resposta ao seu formulário"
+                   class="w-full px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+            <p class="text-xs text-slate-400 mt-1">Assunto do email enviado ao utilizador quando respondes a um formulário.</p>
+        </div>
+
+        <div>
+            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Template do email de resposta</label>
+            <textarea name="admin_response_body" rows="6"
+                      placeholder="<p>Olá, §nome§!</p><p>Recebeu uma resposta: §resposta§</p>"
+                      class="w-full px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 text-sm font-mono focus:ring-2 focus:ring-brand-500 focus:border-transparent"><?= htmlspecialchars(Config::get('admin_response_body', '')) ?></textarea>
+            <p class="text-xs text-slate-400 mt-1">Template HTML do email. Use §nome§ e §resposta§ como placeholders. Vazio = template padrão.</p>
         </div>
 
         <div>

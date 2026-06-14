@@ -149,6 +149,8 @@ class Mailer
 
     /**
      * Send admin response notification with PDF re-attachment.
+     * Uses configurable subject and body templates (admin_response_subject / admin_response_body).
+     * Template placeholders: §nome§ (user name), §resposta§ (response text).
      */
     public static function sendResponseNotification(string $to, string $nome, string $resposta, string $pdfPath): bool
     {
@@ -160,21 +162,32 @@ class Mailer
         $nomeSafe = htmlspecialchars($nome, ENT_QUOTES, 'UTF-8');
         $respostaSafe = nl2br(htmlspecialchars($resposta, ENT_QUOTES, 'UTF-8'));
 
-        $html = <<<HTML
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; background: #f8fafc;">
-            <div style="background: #ffffff; border-radius: 12px; padding: 32px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                <h2 style="color: #4F46E5; margin: 0 0 8px 0;">{$brand}</h2>
-                <p style="color: #475569; font-size: 16px;">Olá, {$nomeSafe}!</p>
-                <p style="color: #475569; font-size: 16px;">Recebeu uma resposta ao seu formulário:</p>
-                <div style="background: #EEF2FF; border-radius: 8px; padding: 16px; margin: 16px 0;">
-                    <p style="color: #475569; font-size: 15px; margin: 0;">{$respostaSafe}</p>
-                </div>
-                <p style="color: #94A3B8; font-size: 14px;">O documento original segue em anexo.</p>
-            </div>
-        </div>
-        HTML;
+        $subject = Config::get('admin_response_subject', '');
+        if (empty($subject)) {
+            $subject = "{$brand} — Resposta ao seu formulário";
+        }
 
-        $subject = "{$brand} — Resposta ao seu formulário";
-        return self::send($to, $subject, $html, $pdfPath);
+        $body = Config::get('admin_response_body', '');
+        if (!empty($body)) {
+            // Use configured template with placeholder substitution
+            $body = str_replace(['§nome§', '§resposta§'], [$nomeSafe, $respostaSafe], $body);
+        } else {
+            // Fallback to built-in template
+            $body = <<<HTML
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; background: #f8fafc;">
+                <div style="background: #ffffff; border-radius: 12px; padding: 32px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                    <h2 style="color: #4F46E5; margin: 0 0 8px 0;">{$brand}</h2>
+                    <p style="color: #475569; font-size: 16px;">Olá, {$nomeSafe}!</p>
+                    <p style="color: #475569; font-size: 16px;">Recebeu uma resposta ao seu formulário:</p>
+                    <div style="background: #EEF2FF; border-radius: 8px; padding: 16px; margin: 16px 0;">
+                        <p style="color: #475569; font-size: 15px; margin: 0;">{$respostaSafe}</p>
+                    </div>
+                    <p style="color: #94A3B8; font-size: 14px;">O documento original segue em anexo.</p>
+                </div>
+            </div>
+            HTML;
+        }
+
+        return self::send($to, $subject, $body, $pdfPath);
     }
 }
