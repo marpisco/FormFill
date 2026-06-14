@@ -179,6 +179,7 @@ class FormBuilder
         $descricao = $data['descricao'] ?? '';
         $instrucoes = $data['instrucoes'] ?? '';
         $privacidade = (int)($data['privacidade'] ?? self::PRIVACY_PUBLIC);
+        $requiresSignature = !empty($data['requires_signature']);
         $campos = json_encode($data['campos'] ?? [], JSON_UNESCAPED_UNICODE);
         $doc = json_encode($data['doc'] ?? ['criar' => true, 'texto' => ''], JSON_UNESCAPED_UNICODE);
         $email = json_encode($data['email'] ?? [
@@ -190,11 +191,11 @@ class FormBuilder
         $criadoPor = $_SESSION['id'] ?? null;
 
         $stmt = $db->prepare(
-            "INSERT INTO forms (id, nome, ativado, descricao, instrucoes, campos, doc, email, privacidade, criado_por) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO forms (id, nome, ativado, descricao, instrucoes, campos, doc, email, privacidade, requires_signature, criado_por) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         );
         if ($stmt) {
-            $stmt->bind_param("ssisssssis", $id, $nome, $ativado, $descricao, $instrucoes, $campos, $doc, $email, $privacidade, $criadoPor);
+            $stmt->bind_param("ssisssssiis", $id, $nome, $ativado, $descricao, $instrucoes, $campos, $doc, $email, $privacidade, $requiresSignature, $criadoPor);
             $stmt->execute();
             $stmt->close();
         }
@@ -214,16 +215,17 @@ class FormBuilder
         $descricao = $data['descricao'] ?? null;
         $instrucoes = $data['instrucoes'] ?? null;
         $privacidade = isset($data['privacidade']) ? (int)$data['privacidade'] : null;
+        $requiresSignature = isset($data['requires_signature']) ? (int)!empty($data['requires_signature']) : null;
         $campos = isset($data['campos']) ? json_encode($data['campos'], JSON_UNESCAPED_UNICODE) : null;
         $doc = isset($data['doc']) ? json_encode($data['doc'], JSON_UNESCAPED_UNICODE) : null;
         $email = isset($data['email']) ? json_encode($data['email'], JSON_UNESCAPED_UNICODE) : null;
 
         $stmt = $db->prepare(
-            "UPDATE forms SET nome = ?, ativado = ?, descricao = ?, instrucoes = ?, privacidade = ?, campos = ?, doc = ?, email = ? WHERE id = ?"
+            "UPDATE forms SET nome = ?, ativado = ?, descricao = ?, instrucoes = ?, privacidade = ?, requires_signature = ?, campos = ?, doc = ?, email = ? WHERE id = ?"
         );
         if (!$stmt) return false;
 
-        $stmt->bind_param("sississss", $nome, $ativado, $descricao, $instrucoes, $privacidade, $campos, $doc, $email, $id);
+        $stmt->bind_param("sissiissss", $nome, $ativado, $descricao, $instrucoes, $privacidade, $requiresSignature, $campos, $doc, $email, $id);
         $result = $stmt->execute();
         $stmt->close();
 

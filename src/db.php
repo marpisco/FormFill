@@ -73,6 +73,7 @@ $db->query("CREATE TABLE IF NOT EXISTS forms (
     doc JSON NOT NULL,
     email JSON NOT NULL,
     privacidade TINYINT DEFAULT 0,
+    requires_signature BOOLEAN DEFAULT FALSE,
     criado_por VARCHAR(99),
     criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
@@ -84,6 +85,12 @@ $db->query("CREATE TABLE IF NOT EXISTS forms (
 $result = $db->query("SHOW COLUMNS FROM forms LIKE 'privacidade'");
 if ($result && $result->num_rows == 0) {
     $db->query("ALTER TABLE forms ADD COLUMN privacidade TINYINT DEFAULT 0");
+}
+
+// Migration: add requires_signature column
+$result = $db->query("SHOW COLUMNS FROM forms LIKE 'requires_signature'");
+if ($result && $result->num_rows == 0) {
+    $db->query("ALTER TABLE forms ADD COLUMN requires_signature BOOLEAN DEFAULT FALSE");
 }
 
 // Forms access control (for privacidade = 2)

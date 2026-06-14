@@ -48,6 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_form'])) {
         'instrucoes'  => $_POST['instrucoes'] ?? '',
         'ativado'     => isset($_POST['ativado']),
         'privacidade' => (int)($_POST['privacidade'] ?? 0),
+        'requires_signature' => !empty($_POST['requires_signature']),
         'campos'      => json_decode($_POST['campos_json'] ?? '[]', true) ?: [],
         'doc'        => [
             'criar' => isset($_POST['doc_criar']),
@@ -123,6 +124,11 @@ $email = $form['email'] ?? [];
                     <option value="2" <?= (int)($form['privacidade'] ?? 0) === 2 ? 'selected' : '' ?>>🔒 Privado — apenas utilizadores autorizados</option>
                 </select>
             </div>
+            <label class="flex items-center gap-2 text-sm">
+                <input type="checkbox" name="requires_signature" value="1" <?= !empty($form['requires_signature']) ? 'checked' : '' ?> class="rounded text-brand-600">
+                <span class="text-slate-600 dark:text-slate-300">Exigir assinatura digital (autenticacao.gov)</span>
+            </label>
+            <p class="text-xs text-slate-400 ml-6">O utilizador terá de descarregar o PDF, assinar e voltar a enviar o documento assinado.</p>
         </div>
 
         <!-- Access List (only for private forms) -->
