@@ -1,22 +1,36 @@
+# FormFill — Apache Configuration
+
+# Enable URL rewriting
 RewriteEngine On
 RewriteBase /
 
-# Protect the htaccess file
-<Files .htaccess>
-Order Allow,Deny
-Deny from all
-</Files>
+# Security headers
+<IfModule mod_headers.c>
+    Header always set X-Frame-Options "DENY"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
 
-# Protect config
-<Files config.json>
-Order Allow,Deny
-Deny from all
-</Files>
+# Block directory listing
+Options -Indexes
 
-<Files configexample.json>
-Order Allow,Deny
-Deny from all
-</Files>
+# Protect sensitive files from direct access
+<FilesMatch "^(config\.php|\.env|composer\.(json|lock)|\.gitignore)$">
+    Require all denied
+</FilesMatch>
 
-# Disable directory browsing
-Options All -Indexes
+# Block access to hidden files and directories
+RedirectMatch 404 /\..*
+
+# Protect the vendor directory
+RedirectMatch 404 /vendor/
+
+# Protect filledforms directory listing but allow PDF access
+<Directory "filledforms">
+    Options -Indexes
+</Directory>
+
+# Cache static assets
+<FilesMatch "\.(css|js|png|jpg|svg|ico)$">
+    Header set Cache-Control "max-age=604800, public"
+</FilesMatch>
