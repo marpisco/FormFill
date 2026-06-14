@@ -238,10 +238,24 @@ class Auth
     // ─── Path B: OAuth2 (Microsoft Azure) ───────────────────────────────────
 
     /**
+     * Check if OAuth2 is enabled in config.
+     */
+    public static function isOAuthEnabled(): bool
+    {
+        global $oauth2_config;
+        return !empty($oauth2_config['enabled']);
+    }
+
+    /**
      * Get the Microsoft OAuth2 authorization URL.
+     * Returns empty string if OAuth is disabled.
      */
     public static function getOAuthUrl(): string
     {
+        if (!self::isOAuthEnabled()) {
+            return '';
+        }
+
         $provider = self::createOAuthProvider();
         $authUrl = $provider->getAuthorizationUrl();
         $_SESSION['oauth2state'] = $provider->getState();
@@ -253,6 +267,9 @@ class Auth
      */
     public static function handleOAuthCallback(string $code, string $state): array
     {
+        if (!self::isOAuthEnabled()) {
+            return ['success' => false, 'message' => 'A autenticação via Microsoft não está disponível.'];
+        }
         // Validate state parameter
         if (empty($state) || !isset($_SESSION['oauth2state']) || $state !== $_SESSION['oauth2state']) {
             Logger::log('Falha na validação do estado OAuth2');

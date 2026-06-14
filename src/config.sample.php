@@ -30,8 +30,10 @@ $smtp_config = [
 ];
 
 // Microsoft Azure OAuth2 (for "Sign in with Microsoft")
+// Set 'enabled' => false to disable OAuth2 — only email OTP will be available.
 // Register an app at https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps
 $oauth2_config = [
+    'enabled'      => false,                                   // false = hide "Sign in with Microsoft" button
     'clientId'     => '00000000-0000-0000-0000-000000000000',
     'clientSecret' => 'CHANGE_ME',
     'tenant'       => 'common',          // 'common' for multi-tenant, or your tenant ID

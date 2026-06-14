@@ -231,16 +231,19 @@ if ($step === 'logout') {
                     </button>
                 </form>
 
-                <!-- OAuth2 divider -->
+                <!-- OAuth2 button (only when enabled) -->
+                <?php $oauthUrl = Auth::getOAuthUrl(); ?>
+                <?php if ($oauthUrl): ?>
                 <div class="relative my-6">
                     <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-slate-200 dark:border-slate-700"></div></div>
                     <div class="relative flex justify-center text-sm"><span class="px-3 bg-white dark:bg-slate-800 text-slate-500">ou</span></div>
                 </div>
-                <a href="<?= Auth::getOAuthUrl() ?>"
+                <a href="<?= $oauthUrl ?>"
                    class="w-full py-2.5 px-4 flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white font-medium rounded-lg transition duration-150">
                     <svg class="w-5 h-5" viewBox="0 0 21 21"><rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/><rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg>
                     Entrar com Microsoft
                 </a>
+                <?php endif; ?>
 
             <!-- ═══ STEP: Verify OTP ═══ -->
             <?php elseif ($step === 'verify'): ?>
