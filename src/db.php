@@ -78,16 +78,15 @@ $db->query("CREATE TABLE IF NOT EXISTS forms (
     PRIMARY KEY (id),
     FOREIGN KEY (criado_por) REFERENCES cache(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+// privacidade: 0 = público, 1 = interno, 2 = privado
 
--- privacidade: 0 = público, 1 = interno, 2 = privado
-
--- Migration: add privacidade column for existing installs
+// Migration: add privacidade column for existing installs
 $result = $db->query("SHOW COLUMNS FROM forms LIKE 'privacidade'");
 if ($result && $result->num_rows == 0) {
     $db->query("ALTER TABLE forms ADD COLUMN privacidade TINYINT DEFAULT 0");
 }
 
--- Forms access control (for privacidade = 2)
+// Forms access control (for privacidade = 2)
 $db->query("CREATE TABLE IF NOT EXISTS forms_access (
     form_id VARCHAR(99) NOT NULL,
     user_id VARCHAR(99) NOT NULL,
