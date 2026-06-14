@@ -149,10 +149,11 @@ class Mailer
 
     /**
      * Send admin response notification with PDF re-attachment.
-     * Uses configurable subject and body templates (admin_response_subject / admin_response_body).
-     * Template placeholders: §nome§ (user name), §resposta§ (response text).
+     * Uses configurable subject and body templates, with optional per-form overrides.
+     * Template placeholders: §nome§ (user name), §resposta§ (response text),
+     * §nomecompleto§, §email§, §id§, #data#.
      */
-    public static function sendResponseNotification(string $to, string $nome, string $resposta, string $pdfPath): bool
+    public static function sendResponseNotification(string $to, string $nome, string $resposta, string $pdfPath, ?string $customSubject = null, ?string $customBody = null): bool
     {
         if (!self::isEnabled()) {
             return true;
@@ -162,15 +163,20 @@ class Mailer
         $nomeSafe = htmlspecialchars($nome, ENT_QUOTES, 'UTF-8');
         $respostaSafe = nl2br(htmlspecialchars($resposta, ENT_QUOTES, 'UTF-8'));
 
-        $subject = Config::get('admin_response_subject', '');
+        // Subject: custom override → global config → default
+        $subject = $customSubject ?: Config::get('admin_response_subject', '');
         if (empty($subject)) {
             $subject = "{$brand} — Resposta ao seu formulário";
         }
 
-        $body = Config::get('admin_response_body', '');
+        $body = $customBody ?: Config::get('admin_response_body', '');
         if (!empty($body)) {
-            // Use configured template with placeholder substitution
-            $body = str_replace(['§nome§', '§resposta§'], [$nomeSafe, $respostaSafe], $body);
+            // Template placeholders: §nome§, §nomecompleto§, §resposta§, §email§, §id§, #data#
+            $body = str_replace(
+                ['§nomecompleto§', '§nome§', '§resposta§', '§email§', '§id§', '#data#'],
+                [$nomeSafe, $nomeSafe, $respostaSafe, '', '', date('d/m/Y')],
+                $body
+            );
         } else {
             // Fallback to built-in template
             $body = <<<HTML

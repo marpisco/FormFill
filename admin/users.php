@@ -13,9 +13,27 @@ $action = $_GET['action'] ?? 'list';
 
 // Toggle admin
 if ($action === 'toggle_admin' && !empty($_GET['id']) && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Prevent demoting the last admin
+    $targetId = $_GET['id'];
+    $check = $db->prepare("SELECT admin FROM cache WHERE id = ?");
+    $check->bind_param("s", $targetId);
+    $check->execute();
+    $target = $check->get_result()->fetch_assoc();
+    $check->close();
+
+    if ($target && !empty($target['admin'])) {
+        // User is admin — check if they're the last one
+        $countCheck = $db->query("SELECT COUNT(*) as c FROM cache WHERE admin = TRUE");
+        $adminCount = (int)$countCheck->fetch_assoc()['c'];
+        if ($adminCount <= 1) {
+            echo "<script>alert('Não é possível remover o último administrador.'); window.history.back();</script>";
+            exit();
+        }
+    }
+
     $stmt = $db->prepare("UPDATE cache SET admin = NOT admin WHERE id = ?");
     if ($stmt) {
-        $stmt->bind_param("s", $_GET['id']);
+        $stmt->bind_param("s", $targetId);
         $stmt->execute();
         $stmt->close();
     }
@@ -88,6 +106,17 @@ if ($action === 'preregister' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $nome = trim($_POST['nome'] ?? '');
     
     if (filter_var($email, FILTER_VALIDATE_EMAIL) && strlen($nome) >= 2) {
+        // Check if a real (non-pre) user already exists with this email
+        $existing = $db->prepare("SELECT id FROM cache WHERE email = ? AND id NOT LIKE 'pre_%'");
+        $existing->bind_param("s", $email);
+        $existing->execute();
+        if ($existing->get_result()->num_rows > 0) {
+            echo "<script>alert('Já existe um utilizador registado com este email.'); window.history.back();</script>";
+            $existing->close();
+            exit();
+        }
+        $existing->close();
+
         $id = 'pre_' . substr(hash('sha256', $email), 0, 32);
         $stmt = $db->prepare("INSERT INTO cache (id, nome, email) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE nome = VALUES(nome)");
         if ($stmt) {

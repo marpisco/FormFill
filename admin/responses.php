@@ -36,17 +36,19 @@ if ($action === 'respond' && !empty($_POST['resposta_id']) && !empty($_POST['res
         if ($row) {
             $hasEmail = !empty($row['email']);
             if ($hasEmail) {
-                // If the form has notification templates, use them as response template overrides
+                // Use form-specific notification templates if configured (no global persistence)
                 $formEmail = $row['form_email'] ? json_decode($row['form_email'], true) : null;
+                $customSubject = null;
+                $customBody = null;
                 if ($formEmail && !empty($formEmail['assuntonotificacao'])) {
-                    Config::set('admin_response_subject', $formEmail['assuntonotificacao']);
+                    $customSubject = $formEmail['assuntonotificacao'];
                 }
                 if ($formEmail && !empty($formEmail['notificacao'])) {
-                    Config::set('admin_response_body', $formEmail['notificacao']);
+                    $customBody = $formEmail['notificacao'];
                 }
 
                 $pdfAbsPath = $row['pdf_path'] ? __DIR__ . '/../' . ltrim($row['pdf_path'], '/') : null;
-                $emailSent = Mailer::sendResponseNotification($row['email'], $row['nome'], $texto, $pdfAbsPath ?? '');
+                $emailSent = Mailer::sendResponseNotification($row['email'], $row['nome'], $texto, $pdfAbsPath ?? '', $customSubject, $customBody);
             }
         }
     }
@@ -104,24 +106,24 @@ $params = [];
 $types = '';
 
 if (!empty($search)) {
-    $where = " WHERE (f.nome LIKE ? OR c.nome LIKE ?)";
+    $where .= " AND (f.nome LIKE ? OR c.nome LIKE ?)";
     $searchParam = "%{$search}%";
     $params = [$searchParam, $searchParam];
     $types = 'ss';
 }
 
 if (!empty($filterForm)) {
-    $where = empty($where) ? " WHERE f.id = ?" : $where . " AND f.id = ?";
+    $where .= " AND f.id = ?";
     $params[] = $filterForm;
     $types .= 's';
 }
 
-$sql = "SELECT r.id, r.form_id, r.pdf_path, r.respondido, r.criado_em, 
+$sql = "SELECT r.id, r.form_id, r.pdf_path, r.respondido, r.signing_pending, r.criado_em, 
                f.nome AS form_nome, c.nome AS user_nome, c.email AS user_email
         FROM respostas r
         JOIN forms f ON r.form_id = f.id
         JOIN cache c ON r.enviador_id = c.id
-        {$where}
+        WHERE r.signing_pending = FALSE{$where}
         ORDER BY r.criado_em DESC
         LIMIT 100";
 

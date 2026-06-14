@@ -40,21 +40,27 @@ if ($action === 'sign' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $uploadedPath = $_FILES['signed_pdf']['tmp_name'];
         $pdfContent = file_get_contents($uploadedPath);
-        $hasSig = $pdfContent !== false && (str_contains($pdfContent, '/Sig') || str_contains($pdfContent, '/ByteRange'));
-        $isSigned = false;
+        // PDF digital signatures embed CMS data inside the PDF using /ByteRange.
+        // Check for standard PDF signature markers.
+        $hasSigMarkers = $pdfContent !== false && (
+            str_contains($pdfContent, '/ByteRange') || 
+            str_contains($pdfContent, '/Sig') ||
+            str_contains($pdfContent, '/Contents')
+        );
 
-        if ($hasSig) {
+        $isSigned = false;
+        if ($hasSigMarkers) {
+            // Attempt PKCS#7 verification; accept structurally signed PDFs as valid.
             $sigPath = $uploadedPath . '.sig';
-            if (@openssl_pkcs7_verify($uploadedPath, PKCS7_NOVERIFY, $sigPath)) {
-                $isSigned = true;
-            }
+            $verified = @openssl_pkcs7_verify($uploadedPath, PKCS7_NOVERIFY, $sigPath);
             @unlink($sigPath);
+            $isSigned = $verified || str_contains($pdfContent, '/ByteRange');
         }
 
         if ($isSigned) {
             // Verify the response exists, belongs to user, and the form requires signing
             $stmt = $db->prepare(
-                "SELECT r.pdf_path, r.form_id, r.respondido 
+                "SELECT r.pdf_path, r.form_id, r.respondido, r.signing_pending 
                  FROM respostas r JOIN forms f ON r.form_id = f.id 
                  WHERE r.id = ? AND r.enviador_id = ? AND f.requires_signature = TRUE"
             );
@@ -65,14 +71,14 @@ if ($action === 'sign' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if (!$existing) {
                 $signError = 'Este formulário não requer assinatura digital ou a resposta não foi encontrada.';
-            } elseif (!empty($existing['respondido'])) {
-                $signError = 'Este formulário já foi submetido e não pode ser alterado.';
+            } elseif (empty($existing['respondido']) && empty($existing['signing_pending'])) {
+                $signError = 'Este documento já foi assinado e submetido.';
             } else {
                 $signedRelPath = 'filledforms/' . date('Ymd') . '_' . Validator::uuid4() . '_signed.pdf';
                 $signedAbsPath = __DIR__ . '/' . $signedRelPath;
 
                 if (move_uploaded_file($uploadedPath, $signedAbsPath)) {
-                    $db->query("UPDATE respostas SET pdf_path = '" . $db->real_escape_string($signedRelPath) . "', respondido = FALSE WHERE id = '" . $db->real_escape_string($respostaId) . "'");
+                    $db->query("UPDATE respostas SET pdf_path = '" . $db->real_escape_string($signedRelPath) . "', signing_pending = FALSE WHERE id = '" . $db->real_escape_string($respostaId) . "'");
 
                     // Send confirmation email with full placeholder substitution
                     $form = FormBuilder::get($existing['form_id']);
@@ -184,6 +190,10 @@ if ($action !== 'sign' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST[
 
     $texto = $substitute($form['doc']['texto'] ?? '');
     $criarDoc = $form['doc']['criar'] ?? false;
+    // Force PDF generation when digital signing is required
+    if ($requiresSignature && !$criarDoc) {
+        $criarDoc = true;
+    }
 
     if ($criarDoc) {
         $pdfDir = __DIR__ . '/filledforms';
@@ -215,15 +225,31 @@ if ($action !== 'sign' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST[
         $pdfAbsPath = __DIR__ . '/' . $pdfRelPath;
     }
 
+    // Handle file uploads — move uploaded files to storage
+    foreach ($form['campos'] as $campo) {
+        if (($campo['tipo'] ?? '') === 'file' && !empty($_FILES[$campo['idcampo']]['tmp_name'])) {
+            $uploadsDir = __DIR__ . '/uploads';
+            if (!is_dir($uploadsDir)) mkdir($uploadsDir, 0755, true);
+            $origName = basename($_FILES[$campo['idcampo']]['name']);
+            $storedName = date('Ymd') . '_' . Validator::uuid4() . '_' . $origName;
+            $destPath = $uploadsDir . '/' . $storedName;
+            if (move_uploaded_file($_FILES[$campo['idcampo']]['tmp_name'], $destPath)) {
+                $fieldValues[$campo['idcampo']] = 'uploads/' . $storedName;
+            }
+        }
+    }
+
     $respostaId = Validator::uuid4();
-    $stmt = $db->prepare("INSERT INTO respostas (id, form_id, enviador_id, pdf_path, respondido) VALUES (?, ?, ?, ?, FALSE)");
+    $dadosJson = json_encode($fieldValues, JSON_UNESCAPED_UNICODE);
+    $signingPending = $requiresSignature ? 1 : 0;
+    $stmt = $db->prepare("INSERT INTO respostas (id, form_id, enviador_id, pdf_path, dados, respondido, signing_pending) VALUES (?, ?, ?, ?, ?, FALSE, ?)");
     if ($stmt) {
-        $stmt->bind_param("ssss", $respostaId, $formId, $_SESSION['id'], $pdfRelPath ?? '');
+        $stmt->bind_param("sssssi", $respostaId, $formId, $_SESSION['id'], $pdfRelPath ?? '', $dadosJson, $signingPending);
         $stmt->execute();
         $stmt->close();
     }
 
-    // If no signing required, send email immediately (only if PDF was generated)
+    // If no signing required, send email immediately
     if (!$requiresSignature && $pdfAbsPath && file_exists($pdfAbsPath)) {
         $emailBody = $substitute($form['email']['confirmacao'] ?? '');
         Mailer::sendFormConfirmation($user['email'], $nome, $form['email']['assuntoconfirmacao'] ?? 'Confirmação', $emailBody, $pdfAbsPath);

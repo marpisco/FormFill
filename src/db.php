@@ -108,13 +108,25 @@ $db->query("CREATE TABLE IF NOT EXISTS respostas (
     form_id VARCHAR(99) NOT NULL,
     enviador_id VARCHAR(99) NOT NULL,
     pdf_path VARCHAR(255) NOT NULL,
+    dados TEXT,
     respondido BOOLEAN DEFAULT FALSE,
     resposta TEXT,
+    signing_pending BOOLEAN DEFAULT FALSE,
     criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     FOREIGN KEY (form_id) REFERENCES forms(id) ON DELETE CASCADE,
     FOREIGN KEY (enviador_id) REFERENCES cache(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+// Migration: add dados, signing_pending columns for existing installs
+$result = $db->query("SHOW COLUMNS FROM respostas LIKE 'dados'");
+if ($result && $result->num_rows == 0) {
+    $db->query("ALTER TABLE respostas ADD COLUMN dados TEXT");
+}
+$result = $db->query("SHOW COLUMNS FROM respostas LIKE 'signing_pending'");
+if ($result && $result->num_rows == 0) {
+    $db->query("ALTER TABLE respostas ADD COLUMN signing_pending BOOLEAN DEFAULT FALSE");
+}
 
 $db->query("CREATE TABLE IF NOT EXISTS rate_limits (
     ip VARCHAR(45) NOT NULL,

@@ -126,7 +126,7 @@ class FormBuilder
         if ($privacidade === self::PRIVACY_INTERNAL) {
             $internalDomain = Config::get('internal_email_domain', '');
             if (empty($internalDomain)) return false;
-            return str_ends_with($user['email'], '@' . $internalDomain);
+            return str_ends_with(strtolower($user['email']), '@' . strtolower($internalDomain));
         }
 
         // Private — access list
@@ -373,10 +373,13 @@ class FormBuilder
         }
 
         $seenIds = [];
+        $reserved = ['form_id', 'csrf_token', 'step', 'action'];
         foreach ($campos as $i => $campo) {
             $idcampo = $campo['idcampo'] ?? '';
             if (empty($idcampo)) {
                 $errors[] = "Campo #" . ($i + 1) . ": ID em falta.";
+            } elseif (in_array($idcampo, $reserved, true)) {
+                $errors[] = "Campo #" . ($i + 1) . ": ID '{$idcampo}' é reservado pelo sistema.";
             } elseif (isset($seenIds[$idcampo])) {
                 $errors[] = "Campo #" . ($i + 1) . ": ID '{$idcampo}' duplicado (também usado no campo #" . $seenIds[$idcampo] . ").";
             } else {

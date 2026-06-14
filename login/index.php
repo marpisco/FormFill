@@ -16,10 +16,11 @@ use FormFill\Lib\Auth;
 use FormFill\Lib\Config;
 use FormFill\Lib\RateLimit;
 
-// Redirect if already logged in (unless doing OAuth callback or logout)
+// Redirect if already logged in (unless doing OAuth callback, logout, or TOTP)
 $isCallback = isset($_GET['code']) && isset($_GET['state']);
 $isLogout = ($_GET['step'] ?? '') === 'logout';
-if (!$isCallback && !$isLogout && isset($_SESSION['id']) && Session::isValid()) {
+$isTotp = ($_GET['step'] ?? '') === 'totp';
+if (!$isCallback && !$isLogout && !$isTotp && isset($_SESSION['id']) && Session::isValid()) {
     header('Location: /');
     exit();
 }
@@ -187,7 +188,13 @@ if ($step === 'totp') {
 
 // ─── Route: Logout ───────────────────────────────────────────────────────────
 if ($step === 'logout') {
-    Auth::logout();
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && Csrf::verify($_POST['csrf_token'] ?? '')) {
+        Auth::logout();
+    }
+    // GET requests show a confirmation form
+    if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+        $step = 'logout_confirm';
+    }
 }
 ?>
 <!DOCTYPE html>
