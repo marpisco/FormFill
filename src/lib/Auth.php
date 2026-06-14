@@ -176,7 +176,12 @@ class Auth
             }
 
             if ($claimedAdmin) {
-                $db->query("UPDATE cache SET admin = TRUE WHERE id = '" . $db->real_escape_string($user['id']) . "'");
+                $updateStmt = $db->prepare("UPDATE cache SET admin = TRUE WHERE id = ?");
+                if ($updateStmt) {
+                    $updateStmt->bind_param("s", $user['id']);
+                    $updateStmt->execute();
+                    $updateStmt->close();
+                }
                 Config::set('initial_setup_complete', 'true');
                 $user['admin'] = true;
             }
@@ -291,8 +296,8 @@ class Auth
         if (!self::isOAuthEnabled()) {
             return ['success' => false, 'message' => 'A autenticação via Microsoft não está disponível.'];
         }
-        // Validate state parameter
-        if (empty($state) || !isset($_SESSION['oauth2state']) || $state !== $_SESSION['oauth2state']) {
+        // Validate state parameter with timing-safe comparison
+        if (empty($state) || !isset($_SESSION['oauth2state']) || !hash_equals($_SESSION['oauth2state'], $state)) {
             Logger::log('Falha na validação do estado OAuth2');
             unset($_SESSION['oauth2state']);
             return ['success' => false, 'message' => 'Falha na validação de segurança. Tente novamente.'];
@@ -360,7 +365,12 @@ class Auth
                         $claimStmt->bind_param("s", $userId);
                         $claimStmt->execute();
                         if ($claimStmt->affected_rows === 1) {
-                            $db->query("UPDATE cache SET admin = TRUE WHERE id = '" . $db->real_escape_string($userId) . "'");
+                            $upStmt = $db->prepare("UPDATE cache SET admin = TRUE WHERE id = ?");
+                            if ($upStmt) {
+                                $upStmt->bind_param("s", $userId);
+                                $upStmt->execute();
+                                $upStmt->close();
+                            }
                             Config::set('initial_setup_complete', 'true');
                             $user['admin'] = true;
                         }
@@ -420,7 +430,13 @@ class Auth
         $db->begin_transaction();
         try {
             // 1. Release the UNIQUE email by renaming old record's email temporarily
-            $db->query("UPDATE cache SET email = '" . $db->real_escape_string($oldId . '@migrated.local') . "' WHERE id = '" . $db->real_escape_string($oldId) . "'");
+            $renameStmt = $db->prepare("UPDATE cache SET email = ? WHERE id = ?");
+            $tempEmail = $oldId . '@migrated.local';
+            if ($renameStmt) {
+                $renameStmt->bind_param("ss", $tempEmail, $oldId);
+                $renameStmt->execute();
+                $renameStmt->close();
+            }
 
             // 2. Insert new OAuth record with the correct email
             $insertStmt = $db->prepare(

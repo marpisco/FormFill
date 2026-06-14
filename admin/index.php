@@ -50,7 +50,7 @@ function acaoexecutada(string $acao): void
 
     $safePost = Validator::redactSensitive($_POST);
     $safeGet  = Validator::redactSensitive($_GET);
-    Logger::log($acao . ".\nPOST: " . var_export($safePost, true) . "\nGET: " . var_export($safeGet, true), []);
+    Logger::log($acaoSegura . ".\nPOST: " . var_export($safePost, true) . "\nGET: " . var_export($safeGet, true), []);
 }
 
 // ─── Helper: active nav link ────────────────────────────────────────────────
@@ -182,11 +182,13 @@ if (parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) === '/admin/') {
         ['url' => '/admin/settings.php', 'label' => 'Configurações', 'icon' => 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z'],
     ];
     foreach ($links as $link) {
-        echo "<a href='{$link['url']}' class='flex items-center gap-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 hover:border-brand-300 dark:hover:border-brand-600 hover:shadow-sm transition group'>
+        $urlSafe = htmlspecialchars($link['url'], ENT_QUOTES, 'UTF-8');
+        $labelSafe = htmlspecialchars($link['label'], ENT_QUOTES, 'UTF-8');
+        echo "<a href='{$urlSafe}' class='flex items-center gap-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 hover:border-brand-300 dark:hover:border-brand-600 hover:shadow-sm transition group'>
             <svg class='w-5 h-5 text-slate-400 group-hover:text-brand-500 transition' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
                 <path stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='{$link['icon']}' />
             </svg>
-            <span class='text-sm font-medium text-slate-700 dark:text-slate-200 group-hover:text-brand-600 dark:group-hover:text-brand-400 transition'>{$link['label']}</span>
+            <span class='text-sm font-medium text-slate-700 dark:text-slate-200 group-hover:text-brand-600 dark:group-hover:text-brand-400 transition'>{$labelSafe}</span>
         </a>";
     }
     echo '</div>';

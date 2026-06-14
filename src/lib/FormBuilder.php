@@ -255,8 +255,18 @@ class FormBuilder
         }
 
         // Delete responses, access entries, then the form
-        $db->query("DELETE FROM respostas WHERE form_id = '" . $db->real_escape_string($id) . "'");
-        $db->query("DELETE FROM forms_access WHERE form_id = '" . $db->real_escape_string($id) . "'");
+        $delStmt = $db->prepare("DELETE FROM respostas WHERE form_id = ?");
+        if ($delStmt) {
+            $delStmt->bind_param("s", $id);
+            $delStmt->execute();
+            $delStmt->close();
+        }
+        $delStmt2 = $db->prepare("DELETE FROM forms_access WHERE form_id = ?");
+        if ($delStmt2) {
+            $delStmt2->bind_param("s", $id);
+            $delStmt2->execute();
+            $delStmt2->close();
+        }
 
         $stmt = $db->prepare("DELETE FROM forms WHERE id = ?");
         if (!$stmt) return false;

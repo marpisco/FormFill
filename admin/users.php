@@ -96,7 +96,12 @@ if ($action === 'delete' && !empty($_GET['id']) && $_SERVER['REQUEST_METHOD'] ==
         echo "<script>alert(" . json_encode($msg) . "); window.history.back();</script>";
     } else {
         // Clean up access entries and logs referencing this user
-        $db->query("DELETE FROM forms_access WHERE user_id = '" . $db->real_escape_string($deleteId) . "'");
+        $cleanStmt = $db->prepare("DELETE FROM forms_access WHERE user_id = ?");
+        if ($cleanStmt) {
+            $cleanStmt->bind_param("s", $deleteId);
+            $cleanStmt->execute();
+            $cleanStmt->close();
+        }
         $stmt = $db->prepare("DELETE FROM cache WHERE id = ?");
         if ($stmt) {
             $stmt->bind_param("s", $deleteId);

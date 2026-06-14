@@ -142,7 +142,11 @@ $campos = $form['campos'] ?? [];
                            class="w-full text-sm text-slate-600 dark:text-slate-300 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-brand-50 dark:file:bg-brand-900 file:text-brand-700 dark:file:text-brand-300 hover:file:bg-brand-100 transition">
 
                     <?php else: ?>
-                    <input type="<?= htmlspecialchars($tipo) ?>" 
+                    <?php
+                    $allowedInputTypes = ['text','email','number','date','time','datetime-local','url','tel','color','range','password','month','week'];
+                    $safeTipo = in_array($tipo, $allowedInputTypes, true) ? $tipo : 'text';
+                    ?>
+                    <input type="<?= htmlspecialchars($safeTipo) ?>" 
                            id="field_<?= htmlspecialchars($campo['idcampo']) ?>"
                            name="<?= htmlspecialchars($campo['idcampo']) ?>"
                            placeholder="<?= htmlspecialchars($campo['placeholder'] ?? '') ?>"

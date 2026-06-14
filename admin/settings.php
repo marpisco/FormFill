@@ -22,6 +22,12 @@ if ($action === 'save' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($field === 'admin_requires_totp') {
             $value = ($value === 'true') ? 'true' : 'false';
         }
+        if ($field === 'blocked_emails_regex' && !empty($value)) {
+            // Validate regex before saving — silent failure on invalid regex
+            if (@preg_match($value, '') === false) {
+                continue; // skip invalid regex
+            }
+        }
         if ($value !== null) {
             Config::set($field, $value);
         }

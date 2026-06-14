@@ -15,6 +15,7 @@ use FormFill\Lib\Csrf;
 use FormFill\Lib\Auth;
 use FormFill\Lib\Config;
 use FormFill\Lib\RateLimit;
+use FormFill\Lib\Validator;
 
 // Redirect if already logged in (unless doing OAuth callback, logout, or TOTP)
 $isCallback = isset($_GET['code']) && isset($_GET['state']);
@@ -50,14 +51,20 @@ if ($step === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!Csrf::verify($_POST['csrf_token'] ?? '')) {
         $error = 'Pedido inválido. Atualize a página.';
     } else {
-        $result = Auth::sendCode($_POST['email'] ?? '');
-        if ($result['success']) {
-            $_SESSION['pending_email'] = $_POST['email'];
-            $message = $result['message'];
-            $step = 'verify';
-        } else {
-            $error = $result['message'];
+        $email = Validator::email($_POST['email'] ?? '');
+        if (!$email) {
+            $error = 'Email inválido.';
             $step = 'email';
+        } else {
+            $result = Auth::sendCode($email);
+            if ($result['success']) {
+                $_SESSION['pending_email'] = $email;
+                $message = $result['message'];
+                $step = 'verify';
+            } else {
+                $error = $result['message'];
+                $step = 'email';
+            }
         }
     }
 }

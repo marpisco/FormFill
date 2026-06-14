@@ -87,7 +87,12 @@ if ($action === 'sign' && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 $signedAbsPath = __DIR__ . '/' . $signedRelPath;
 
                 if (move_uploaded_file($uploadedPath, $signedAbsPath)) {
-                    $db->query("UPDATE respostas SET pdf_path = '" . $db->real_escape_string($signedRelPath) . "', signing_pending = FALSE WHERE id = '" . $db->real_escape_string($respostaId) . "'");
+                    $upStmt = $db->prepare("UPDATE respostas SET pdf_path = ?, signing_pending = FALSE WHERE id = ?");
+                    if ($upStmt) {
+                        $upStmt->bind_param("ss", $signedRelPath, $respostaId);
+                        $upStmt->execute();
+                        $upStmt->close();
+                    }
 
                     // Send confirmation email with full placeholder substitution
                     $form = FormBuilder::get($existing['form_id']);
@@ -241,6 +246,7 @@ if ($action !== 'sign' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST[
         $pdfDir = __DIR__ . '/filledforms';
         if (!is_dir($pdfDir)) mkdir($pdfDir, 0755, true);
 
+        if (!class_exists('FormFillPDF', false)) {
         class FormFillPDF extends \Fpdf\Fpdf {
             public function criarDocumento(string $titulo, string $texto): string {
                 $this->AddPage(); $this->SetXY(10, 40);
@@ -260,6 +266,7 @@ if ($action !== 'sign' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST[
                 $c = @iconv('UTF-8', 'Windows-1252//TRANSLIT', $t);
                 return $c !== false ? $c : preg_replace('/[^\x20-\x7E\xA0-\xFF]/', '?', $t);
             }
+        }
         }
 
         $pdf = new FormFillPDF();

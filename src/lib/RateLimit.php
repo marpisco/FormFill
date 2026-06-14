@@ -119,7 +119,7 @@ class RateLimit
             );
             if (!$selectStmt) {
                 $db->rollback();
-                return true; // fail open
+                return false; // fail closed on DB error
             }
             $selectStmt->bind_param("iss", $windowSeconds, $ip, $action);
             $selectStmt->execute();
@@ -321,7 +321,7 @@ class RateLimit
             );
             if (!$selectStmt) {
                 $db->rollback();
-                return true;
+                return false;
             }
             $selectStmt->bind_param("iss", $windowSeconds, $ip, $scopedAction);
             $selectStmt->execute();

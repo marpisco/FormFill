@@ -36,5 +36,6 @@ RedirectMatch 403 ^/filledforms/?$
 </FilesMatch>
 </IfModule>
 
-# Block access to uploads directory (files served through PHP proxy only)
+# Block direct access to upload directories (files served through PHP proxy only)
 RedirectMatch 403 ^/uploads/
+RedirectMatch 403 ^/data/uploads/
