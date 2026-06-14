@@ -99,7 +99,7 @@ if ($criarDoc) {
         mkdir($pdfDir, 0755, true);
     }
 
-    class FormFillPDF extends \FPDF
+    class FormFillPDF extends \Fpdf\Fpdf
     {
         public function criarDocumento(string $titulo, string $texto, array $form): string
         {
