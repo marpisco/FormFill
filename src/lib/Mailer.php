@@ -153,7 +153,7 @@ class Mailer
      * Template placeholders: §nome§ (user name), §resposta§ (response text),
      * §nomecompleto§, §email§, §id§, #data#.
      */
-    public static function sendResponseNotification(string $to, string $nome, string $resposta, string $pdfPath, ?string $customSubject = null, ?string $customBody = null): bool
+    public static function sendResponseNotification(string $to, string $nome, string $resposta, string $pdfPath, ?string $customSubject = null, ?string $customBody = null, string $userEmail = '', string $userId = ''): bool
     {
         if (!self::isEnabled()) {
             return true;
@@ -163,18 +163,24 @@ class Mailer
         $nomeSafe = htmlspecialchars($nome, ENT_QUOTES, 'UTF-8');
         $respostaSafe = nl2br(htmlspecialchars($resposta, ENT_QUOTES, 'UTF-8'));
 
-        // Subject: custom override → global config → default
+        // Subject: custom override → global config → default. Substitute placeholders.
         $subject = $customSubject ?: Config::get('admin_response_subject', '');
         if (empty($subject)) {
             $subject = "{$brand} — Resposta ao seu formulário";
+        } else {
+            $subject = str_replace(
+                ['§brand§', '§nome§', '§nomecompleto§', '§email§', '§id§', '#data#'],
+                [$brand, $nomeSafe, $nomeSafe, $userEmail, $userId, date('d/m/Y')],
+                $subject
+            );
         }
 
         $body = $customBody ?: Config::get('admin_response_body', '');
         if (!empty($body)) {
-            // Template placeholders: §nome§, §nomecompleto§, §resposta§, §email§, §id§, #data#
+            // Template placeholders
             $body = str_replace(
                 ['§nomecompleto§', '§nome§', '§resposta§', '§email§', '§id§', '#data#'],
-                [$nomeSafe, $nomeSafe, $respostaSafe, '', '', date('d/m/Y')],
+                [$nomeSafe, $nomeSafe, $respostaSafe, $userEmail, $userId, date('d/m/Y')],
                 $body
             );
         } else {

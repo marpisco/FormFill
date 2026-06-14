@@ -64,6 +64,18 @@ class Auth
             $stmt->close();
         }
 
+        // Fetch the actual row ID (may differ from hash for pre-registered users)
+        $actualStmt = $db->prepare("SELECT id FROM cache WHERE email = ?");
+        if ($actualStmt) {
+            $actualStmt->bind_param("s", $email);
+            $actualStmt->execute();
+            $row = $actualStmt->get_result()->fetch_assoc();
+            $actualStmt->close();
+            if ($row) {
+                $userId = $row['id'];
+            }
+        }
+
         // Clear any previous verify_code rate limit so the new code can be tried
         RateLimit::clearUser('verify_code', $userId);
 
@@ -150,8 +162,8 @@ class Auth
         $claimedAdmin = false;
         if (!$needsNameSetup || !empty($user['admin'])) {
             // Already set up or already admin — just login
-        } else {
-            // New user — atomic first-admin claim via INSERT ON DUPLICATE KEY
+        } elseif (defined('IS_FIRST_RUN') && IS_FIRST_RUN) {
+            // New user on a fresh installation — atomic first-admin claim
             $claimStmt = $db->prepare(
                 "INSERT INTO config (config_key, config_value) VALUES ('first_user_admin_id', ?) 
                  ON DUPLICATE KEY UPDATE config_value = config_value"
@@ -338,8 +350,8 @@ class Auth
 
                 $user = ['id' => $userId, 'nome' => $displayName, 'email' => $email, 'admin' => $migrated, 'totp_secret' => null];
 
-                // Race-safe first-user admin claim: atomic INSERT gates the race
-                if (!$migrated) {
+                // Race-safe first-user admin claim (gated on fresh installation only)
+                if (!$migrated && defined('IS_FIRST_RUN') && IS_FIRST_RUN) {
                     $claimStmt = $db->prepare(
                         "INSERT INTO config (config_key, config_value) VALUES ('first_user_admin_id', ?) 
                          ON DUPLICATE KEY UPDATE config_value = config_value"
@@ -436,7 +448,15 @@ class Auth
                 $updateStmt2->close();
             }
 
-            // 5. Delete old record (no more FK references)
+            // 5. Update foreign keys in forms_access
+            $updateStmt3 = $db->prepare("UPDATE forms_access SET user_id = ? WHERE user_id = ?");
+            if ($updateStmt3) {
+                $updateStmt3->bind_param("ss", $newId, $oldId);
+                $updateStmt3->execute();
+                $updateStmt3->close();
+            }
+
+            // 6. Delete old record (no more FK references)
             $deleteStmt = $db->prepare("DELETE FROM cache WHERE id = ?");
             if ($deleteStmt) {
                 $deleteStmt->bind_param("s", $oldId);
@@ -533,6 +553,9 @@ class Auth
     {
         Session::regenerate();
         Csrf::regenerate();
+
+        // Clear any stale TOTP verification from a previous login session
+        unset($_SESSION['totp_verified'], $_SESSION['admin_checked_at']);
 
         $_SESSION['id']       = $user['id'];
         $_SESSION['nome']     = $user['nome'];

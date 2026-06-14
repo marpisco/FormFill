@@ -13,29 +13,36 @@ $action = $_GET['action'] ?? 'list';
 
 // Toggle admin
 if ($action === 'toggle_admin' && !empty($_GET['id']) && $_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Prevent demoting the last admin
     $targetId = $_GET['id'];
-    $check = $db->prepare("SELECT admin FROM cache WHERE id = ?");
-    $check->bind_param("s", $targetId);
-    $check->execute();
-    $target = $check->get_result()->fetch_assoc();
-    $check->close();
+    
+    // Atomic check: use transaction with FOR UPDATE to prevent race
+    $db->begin_transaction();
+    try {
+        $check = $db->prepare("SELECT admin FROM cache WHERE id = ? FOR UPDATE");
+        $check->bind_param("s", $targetId);
+        $check->execute();
+        $target = $check->get_result()->fetch_assoc();
+        $check->close();
 
-    if ($target && !empty($target['admin'])) {
-        // User is admin — check if they're the last one
-        $countCheck = $db->query("SELECT COUNT(*) as c FROM cache WHERE admin = TRUE");
-        $adminCount = (int)$countCheck->fetch_assoc()['c'];
-        if ($adminCount <= 1) {
-            echo "<script>alert('Não é possível remover o último administrador.'); window.history.back();</script>";
-            exit();
+        if ($target && !empty($target['admin'])) {
+            $countCheck = $db->query("SELECT COUNT(*) as c FROM cache WHERE admin = TRUE FOR UPDATE");
+            $adminCount = (int)$countCheck->fetch_assoc()['c'];
+            if ($adminCount <= 1) {
+                $db->rollback();
+                echo "<script>alert('Não é possível remover o último administrador.'); window.history.back();</script>";
+                exit();
+            }
         }
-    }
 
-    $stmt = $db->prepare("UPDATE cache SET admin = NOT admin WHERE id = ?");
-    if ($stmt) {
-        $stmt->bind_param("s", $targetId);
-        $stmt->execute();
-        $stmt->close();
+        $stmt = $db->prepare("UPDATE cache SET admin = NOT admin WHERE id = ?");
+        if ($stmt) {
+            $stmt->bind_param("s", $targetId);
+            $stmt->execute();
+            $stmt->close();
+        }
+        $db->commit();
+    } catch (\Throwable $e) {
+        $db->rollback();
     }
     acaoexecutada("Administrador ativado/desativado");
 }

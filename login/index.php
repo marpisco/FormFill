@@ -366,13 +366,16 @@ if ($step === 'logout') {
                     </button>
                 </form>
 
-            <?php endif; ?>
-        </div>
+            <?php elseif ($step === 'logout_confirm'): ?>
+                <h2 class="text-xl font-semibold text-slate-800 dark:text-slate-200 mb-2">Terminar sessão</h2>
+                <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">Tem a certeza que deseja terminar a sessão?</p>
+                <form method="POST" action="?step=logout" class="flex gap-3">
+                    <?= Csrf::field() ?>
+                    <button type="submit" class="flex-1 py-2.5 px-4 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition">Sim, terminar sessão</button>
+                    <a href="/" class="flex-1 py-2.5 px-4 text-center border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition">Cancelar</a>
+                </form>
 
-        <p class="text-center text-xs text-slate-400 dark:text-slate-500 mt-6">
-            &copy; <?= date('Y') ?> <?= htmlspecialchars(Config::brandName()) ?>
-        </p>
-    </div>
+            <?php endif; ?>
     <?= Csrf::globalInjector() ?>
 </body>
 </html>

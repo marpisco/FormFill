@@ -4,6 +4,11 @@
  * 
  * Copy this file to src/config.php and fill in your values.
  * src/config.php is gitignored and will never be committed.
+ * 
+ * IMPORTANT: At least one authentication provider must be enabled:
+ *   - SMTP (smtp_config['enabled'] => true) for email OTP login, OR
+ *   - OAuth2 (oauth2_config['enabled'] => true) for Microsoft sign-in, OR
+ *   - Both. With neither enabled, no user can authenticate.
  */
 
 // MySQL/MariaDB connection

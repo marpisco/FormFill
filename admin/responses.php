@@ -19,7 +19,7 @@ if ($action === 'respond' && !empty($_POST['resposta_id']) && !empty($_POST['res
 
     // Get user email, PDF, and form notification template
     $stmt = $db->prepare(
-        "SELECT r.pdf_path, r.form_id, c.email, c.nome, f.email AS form_email
+        "SELECT r.pdf_path, r.form_id, c.email, c.nome, c.id AS user_id, f.email AS form_email
          FROM respostas r 
          JOIN cache c ON r.enviador_id = c.id 
          JOIN forms f ON r.form_id = f.id
@@ -48,7 +48,7 @@ if ($action === 'respond' && !empty($_POST['resposta_id']) && !empty($_POST['res
                 }
 
                 $pdfAbsPath = $row['pdf_path'] ? __DIR__ . '/../' . ltrim($row['pdf_path'], '/') : null;
-                $emailSent = Mailer::sendResponseNotification($row['email'], $row['nome'], $texto, $pdfAbsPath ?? '', $customSubject, $customBody);
+                $emailSent = Mailer::sendResponseNotification($row['email'], $row['nome'], $texto, $pdfAbsPath ?? '', $customSubject, $customBody, $row['email'], $row['user_id'] ?? '');
             }
         }
     }
@@ -68,14 +68,16 @@ if ($action === 'respond' && !empty($_POST['resposta_id']) && !empty($_POST['res
 
 // ─── Delete response ─────────────────────────────────────────────────────────
 if ($action === 'delete' && !empty($_GET['id']) && $_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Fetch PDF path before deleting
-    $stmt = $db->prepare("SELECT pdf_path FROM respostas WHERE id = ?");
+    // Fetch PDF path and dados before deleting
+    $stmt = $db->prepare("SELECT pdf_path, dados FROM respostas WHERE id = ?");
     $pdfPath = null;
+    $dados = null;
     if ($stmt) {
         $stmt->bind_param("s", $_GET['id']);
         $stmt->execute();
         $row = $stmt->get_result()->fetch_assoc();
         $pdfPath = $row['pdf_path'] ?? null;
+        $dados = $row['dados'] ?? null;
         $stmt->close();
     }
 
@@ -91,6 +93,21 @@ if ($action === 'delete' && !empty($_GET['id']) && $_SERVER['REQUEST_METHOD'] ==
         $pdfFile = __DIR__ . '/../' . ltrim($pdfPath, '/');
         if (file_exists($pdfFile)) {
             @unlink($pdfFile);
+        }
+    }
+
+    // Delete uploaded attachment files referenced in dados
+    if ($dados) {
+        $fieldValues = json_decode($dados, true);
+        if (is_array($fieldValues)) {
+            foreach ($fieldValues as $val) {
+                if (is_string($val) && preg_match('#^data/uploads/#', $val)) {
+                    $uploadFile = __DIR__ . '/../' . ltrim($val, '/');
+                    if (file_exists($uploadFile)) {
+                        @unlink($uploadFile);
+                    }
+                }
+            }
         }
     }
 
@@ -118,7 +135,7 @@ if (!empty($filterForm)) {
     $types .= 's';
 }
 
-$sql = "SELECT r.id, r.form_id, r.pdf_path, r.respondido, r.signing_pending, r.criado_em, 
+$sql = "SELECT r.id, r.form_id, r.pdf_path, r.respondido, r.signing_pending, r.dados, r.criado_em, 
                f.nome AS form_nome, c.nome AS user_nome, c.email AS user_email
         FROM respostas r
         JOIN forms f ON r.form_id = f.id

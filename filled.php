@@ -39,22 +39,31 @@ if ($action === 'sign' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $signError = 'Nenhum ficheiro enviado.';
     } else {
         $uploadedPath = $_FILES['signed_pdf']['tmp_name'];
+        // Verify the uploaded PDF contains a valid digital signature.
+        // Extract CMS data from the PDF byte range and verify with openssl.
         $pdfContent = file_get_contents($uploadedPath);
-        // PDF digital signatures embed CMS data inside the PDF using /ByteRange.
-        // Check for standard PDF signature markers.
-        $hasSigMarkers = $pdfContent !== false && (
-            str_contains($pdfContent, '/ByteRange') || 
-            str_contains($pdfContent, '/Sig') ||
-            str_contains($pdfContent, '/Contents')
-        );
-
         $isSigned = false;
-        if ($hasSigMarkers) {
-            // Attempt PKCS#7 verification; accept structurally signed PDFs as valid.
-            $sigPath = $uploadedPath . '.sig';
-            $verified = @openssl_pkcs7_verify($uploadedPath, PKCS7_NOVERIFY, $sigPath);
-            @unlink($sigPath);
-            $isSigned = $verified || str_contains($pdfContent, '/ByteRange');
+
+        if ($pdfContent !== false && preg_match('/\/ByteRange\s*\[\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*\]/', $pdfContent, $m)) {
+            $a = (int)$m[1]; $b = (int)$m[2]; $c = (int)$m[3]; $d = (int)$m[4];
+            // Extract CMS signature from byte range: bytes [a .. b-1]
+            $cmsData = substr($pdfContent, $a, $b);
+            // Signed data: bytes [0 .. a-1] + [c .. c+d-1]
+            $signedData = substr($pdfContent, 0, $a) . substr($pdfContent, $c, $d);
+            // Write extracted data to temp files for openssl
+            $tmpCms = tempnam(sys_get_temp_dir(), 'pdfsig_');
+            $tmpData = tempnam(sys_get_temp_dir(), 'pdfdat_');
+            if ($tmpCms && $tmpData) {
+                file_put_contents($tmpCms, $cmsData);
+                file_put_contents($tmpData, $signedData);
+                // Verify CMS signature against signed data
+                $sigOut = $tmpCms . '.out';
+                $isSigned = @openssl_cms_verify($tmpData, OPENSSL_CMS_NOVERIFY, null, [], $tmpCms) 
+                         || @openssl_pkcs7_verify($tmpData, PKCS7_NOVERIFY, $sigOut, [], $tmpCms);
+                @unlink($tmpData);
+                @unlink($tmpCms);
+                @unlink($sigOut);
+            }
         }
 
         if ($isSigned) {
@@ -71,7 +80,7 @@ if ($action === 'sign' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if (!$existing) {
                 $signError = 'Este formulário não requer assinatura digital ou a resposta não foi encontrada.';
-            } elseif (empty($existing['respondido']) && empty($existing['signing_pending'])) {
+            } elseif (empty($existing['signing_pending'])) {
                 $signError = 'Este documento já foi assinado e submetido.';
             } else {
                 $signedRelPath = 'filledforms/' . date('Ymd') . '_' . Validator::uuid4() . '_signed.pdf';
@@ -83,20 +92,32 @@ if ($action === 'sign' && $_SERVER['REQUEST_METHOD'] === 'POST') {
                     // Send confirmation email with full placeholder substitution
                     $form = FormBuilder::get($existing['form_id']);
                     if ($form) {
+                        // Load user and submission data for placeholder substitution
                         $uStmt = $db->prepare("SELECT nome, email FROM cache WHERE id = ?");
                         $uStmt->bind_param("s", $_SESSION['id']);
                         $uStmt->execute();
                         $user = $uStmt->get_result()->fetch_assoc();
                         $uStmt->close();
 
+                        // Load stored field values for &field& placeholders
+                        $dStmt = $db->prepare("SELECT dados FROM respostas WHERE id = ?");
+                        $dStmt->bind_param("s", $respostaId);
+                        $dStmt->execute();
+                        $dRow = $dStmt->get_result()->fetch_assoc();
+                        $dStmt->close();
+                        $fieldValues = $dRow && $dRow['dados'] ? json_decode($dRow['dados'], true) : [];
+
                         if ($user) {
                             $nome = explode(' ', $user['nome'])[0];
                             $emailBody = $form['email']['confirmacao'] ?? '';
-                            // Full substitution matching the main submission flow
                             $emailBody = str_replace('#data#', date('d/m/Y'), $emailBody);
                             $emailBody = str_replace('§nomecompleto§', $user['nome'], $emailBody);
                             $emailBody = str_replace('§nome§', $nome, $emailBody);
-                            $emailBody = str_replace('§id§', $user['email'] ?? '', $emailBody);
+                            $emailBody = str_replace('§id§', $_SESSION['id'], $emailBody);
+                            $emailBody = str_replace('§email§', $user['email'], $emailBody);
+                            foreach ((array)$fieldValues as $fid => $fval) {
+                                $emailBody = str_replace("&{$fid}&", $fval, $emailBody);
+                            }
                             Mailer::sendFormConfirmation($user['email'], $nome, $form['email']['assuntoconfirmacao'] ?? 'Confirmação', $emailBody, $signedAbsPath);
                         }
                     }
@@ -158,16 +179,37 @@ if ($action !== 'sign' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST[
         $v = '';
 
         if ($tipo === 'file') {
-            $v = $_FILES[$idcampo]['name'] ?? '';
+            $fileInfo = $_FILES[$idcampo] ?? null;
+            if ($fileInfo && ($fileInfo['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
+                $v = $fileInfo['name'];
+            }
         } else {
             $v = $_POST[$idcampo] ?? '';
             if (is_array($v)) $v = implode(', ', $v);
         }
 
         // Server-side validation of required fields
-        if (!empty($campo['obrigatorio']) && (is_string($v) ? trim($v) === '' : empty($v))) {
+        $isEmpty = is_string($v) ? trim($v) === '' : empty($v);
+        if ($tipo === 'file') {
+            $isEmpty = empty($_FILES[$idcampo]['tmp_name']) || ($_FILES[$idcampo]['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK;
+        }
+        if (!empty($campo['obrigatorio']) && $isEmpty) {
             $validationErrors[] = "O campo '" . ($campo['descricao'] ?? $idcampo) . "' é obrigatório.";
         }
+
+        // Validate select/radio/checkbox against configured options
+        if (in_array($tipo, ['select', 'radio', 'checkbox'], true) && !empty($campo['opcoes']) && !empty(trim((string)$v))) {
+            $allowed = is_array($campo['opcoes']) ? $campo['opcoes'] : explode(',', $campo['opcoes']);
+            $allowed = array_map('trim', $allowed);
+            $values = ($tipo === 'checkbox' && is_array($_POST[$idcampo] ?? null)) ? $_POST[$idcampo] : [$v];
+            foreach ($values as $val) {
+                if (!empty(trim((string)$val)) && !in_array(trim((string)$val), $allowed, true)) {
+                    $validationErrors[] = "O campo '" . ($campo['descricao'] ?? $idcampo) . "' contém um valor inválido.";
+                    break;
+                }
+            }
+        }
+
         $fieldValues[$idcampo] = $v;
     }
 
@@ -225,16 +267,26 @@ if ($action !== 'sign' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST[
         $pdfAbsPath = __DIR__ . '/' . $pdfRelPath;
     }
 
-    // Handle file uploads — move uploaded files to storage
+    // Handle file uploads — move to storage outside web root
+    $allowedExtensions = ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'doc', 'docx', 'xls', 'xlsx', 'txt', 'zip'];
     foreach ($form['campos'] as $campo) {
         if (($campo['tipo'] ?? '') === 'file' && !empty($_FILES[$campo['idcampo']]['tmp_name'])) {
-            $uploadsDir = __DIR__ . '/uploads';
+            $fileInfo = $_FILES[$campo['idcampo']];
+            // Validate upload succeeded
+            if (($fileInfo['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+                continue;
+            }
+            $origName = basename($fileInfo['name']);
+            $ext = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
+            if (!in_array($ext, $allowedExtensions, true)) {
+                continue;
+            }
+            $uploadsDir = __DIR__ . '/../data/uploads';
             if (!is_dir($uploadsDir)) mkdir($uploadsDir, 0755, true);
-            $origName = basename($_FILES[$campo['idcampo']]['name']);
             $storedName = date('Ymd') . '_' . Validator::uuid4() . '_' . $origName;
             $destPath = $uploadsDir . '/' . $storedName;
-            if (move_uploaded_file($_FILES[$campo['idcampo']]['tmp_name'], $destPath)) {
-                $fieldValues[$campo['idcampo']] = 'uploads/' . $storedName;
+            if (move_uploaded_file($fileInfo['tmp_name'], $destPath)) {
+                $fieldValues[$campo['idcampo']] = 'data/uploads/' . $storedName;
             }
         }
     }
@@ -266,6 +318,21 @@ if ($action !== 'sign' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST[
 
 // ─── Render ──────────────────────────────────────────────────────────────────
 if (!$submitted && !$signSuccess && !$signError) { exit(); } // only render after submit
+
+// When rendering sign errors, reload form context for the signing form
+if ($signError && empty($form) && !empty($_POST['resposta_id'])) {
+    $stmt = $db->prepare("SELECT r.form_id, r.pdf_path, f.requires_signature
+        FROM respostas r JOIN forms f ON r.form_id = f.id
+        WHERE r.id = ? AND r.enviador_id = ?");
+    $stmt->bind_param("ss", $_POST['resposta_id'], $_SESSION['id']);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    if ($row) {
+        $requiresSignature = !empty($row['requires_signature']);
+        $pdfRelPath = $row['pdf_path'];
+    }
+}
 
 $brand = Config::brandName();
 ?>

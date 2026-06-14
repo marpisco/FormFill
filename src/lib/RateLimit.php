@@ -266,7 +266,9 @@ class RateLimit
      */
     private static function userAction(string $action, string $userId): string
     {
-        return $action . ':' . substr(hash('sha256', $userId), 0, 32);
+        // Reserve space for action + ':' separator; truncate hash to fit VARCHAR(50)
+        $maxHashLen = max(8, 49 - strlen($action));
+        return $action . ':' . substr(hash('sha256', $userId), 0, $maxHashLen);
     }
 
     /**
