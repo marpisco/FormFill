@@ -233,11 +233,31 @@ class FormBuilder
     }
 
     /**
-     * Delete a form by ID.
+     * Delete a form and all associated data.
      */
     public static function delete(string $id): bool
     {
         global $db;
+
+        // Delete associated PDF files
+        $stmt = $db->prepare("SELECT pdf_path FROM respostas WHERE form_id = ? AND pdf_path IS NOT NULL AND pdf_path != ''");
+        if ($stmt) {
+            $stmt->bind_param("s", $id);
+            $stmt->execute();
+            $pdfResult = $stmt->get_result();
+            while ($row = $pdfResult->fetch_assoc()) {
+                $pdfFile = __DIR__ . '/../../' . ltrim($row['pdf_path'], '/');
+                if (file_exists($pdfFile)) {
+                    @unlink($pdfFile);
+                }
+            }
+            $stmt->close();
+        }
+
+        // Delete responses, access entries, then the form
+        $db->query("DELETE FROM respostas WHERE form_id = '" . $db->real_escape_string($id) . "'");
+        $db->query("DELETE FROM forms_access WHERE form_id = '" . $db->real_escape_string($id) . "'");
+
         $stmt = $db->prepare("DELETE FROM forms WHERE id = ?");
         if (!$stmt) return false;
         $stmt->bind_param("s", $id);

@@ -87,6 +87,7 @@ class Config
 
     public static function adminRequiresTotp(): bool
     {
-        return self::get('admin_requires_totp', 'true') === 'true';
+        $val = self::get('admin_requires_totp', false);
+        return $val === true || $val === 'true' || $val === '1' || $val === 1;
     }
 }

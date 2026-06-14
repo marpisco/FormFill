@@ -91,7 +91,7 @@ class Auth
         global $db;
 
         // Look up the user
-        $stmt = $db->prepare("SELECT id, nome, email, admin, otp_code_hash, otp_expires FROM cache WHERE email = ?");
+        $stmt = $db->prepare("SELECT id, nome, email, admin, totp_secret, otp_code_hash, otp_expires FROM cache WHERE email = ?");
         if (!$stmt) {
             return ['success' => false, 'message' => 'Erro interno.', 'needsNameSetup' => false];
         }
@@ -136,8 +136,8 @@ class Auth
             $clearStmt->close();
         }
 
-        // Clear rate limit on success
-        RateLimit::clear('verify_code:' . $user['id']);
+        // Clear user-scoped rate limit on success
+        RateLimit::clearUser('verify_code', $user['id']);
 
         // Check if user needs name setup (new user with no nome)
         $needsNameSetup = empty($user['nome']);
@@ -182,12 +182,17 @@ class Auth
             return ['success' => true, 'message' => 'Código verificado.', 'needsNameSetup' => true];
         }
 
-        // Full login
-        if (!empty($user['admin']) && Config::adminRequiresTotp() && empty($user['totp_secret'])) {
-            // Admin needs TOTP setup
-            $_SESSION['pending_totp_setup'] = $user['id'];
-            $_SESSION['pending_totp_email'] = $user['email'];
-            return ['success' => true, 'message' => 'Autenticação de dois fatores necessária.', 'needsNameSetup' => false, 'needsTotp' => true];
+        // Full login — check TOTP requirement
+        if (!empty($user['admin']) && Config::adminRequiresTotp()) {
+            if (empty($user['totp_secret'])) {
+                // Admin needs TOTP setup (first time)
+                $_SESSION['pending_totp_setup'] = $user['id'];
+                $_SESSION['pending_totp_email'] = $user['email'];
+                return ['success' => true, 'message' => 'Autenticação de dois fatores necessária.', 'needsNameSetup' => false, 'needsTotp' => true];
+            }
+            // Admin has TOTP enrolled — require verification before login
+            $_SESSION['pending_totp_verify'] = ['id' => $user['id'], 'nome' => $user['nome'], 'email' => $user['email'], 'admin' => $user['admin']];
+            return ['success' => true, 'message' => 'Introduza o código de autenticação de dois fatores.', 'needsNameSetup' => false, 'needsTotp' => true];
         }
 
         self::login($user, !empty($user['admin']));
@@ -220,10 +225,11 @@ class Auth
             $stmt->close();
         }
 
+        $userEmail = $_SESSION['pending_user_email'] ?? '';
         unset($_SESSION['pending_user_setup'], $_SESSION['pending_user_email'], $_SESSION['pending_user_admin']);
 
         // Build user array for login
-        $user = ['id' => $userId, 'nome' => $name, 'email' => $_SESSION['pending_user_email'] ?? '', 'admin' => $isAdmin];
+        $user = ['id' => $userId, 'nome' => $name, 'email' => $userEmail, 'admin' => $isAdmin];
 
         if ($isAdmin && Config::adminRequiresTotp()) {
             $_SESSION['pending_totp_setup'] = $userId;
@@ -358,10 +364,15 @@ class Auth
             }
 
             // TOTP check
-            if (!empty($user['admin']) && Config::adminRequiresTotp() && empty($user['totp_secret'])) {
-                $_SESSION['pending_totp_setup'] = $user['id'];
-                $_SESSION['pending_totp_email'] = $user['email'];
-                return ['success' => true, 'message' => 'Autenticação de dois fatores necessária.', 'needsTotp' => true];
+            if (!empty($user['admin']) && Config::adminRequiresTotp()) {
+                if (empty($user['totp_secret'])) {
+                    $_SESSION['pending_totp_setup'] = $user['id'];
+                    $_SESSION['pending_totp_email'] = $user['email'];
+                    return ['success' => true, 'message' => 'Autenticação de dois fatores necessária.', 'needsTotp' => true];
+                }
+                // Admin has TOTP enrolled — require verification before login
+                $_SESSION['pending_totp_verify'] = ['id' => $user['id'], 'nome' => $user['nome'], 'email' => $user['email'], 'admin' => $user['admin']];
+                return ['success' => true, 'message' => 'Introduza o código de autenticação de dois fatores.', 'needsTotp' => true];
             }
 
             self::login($user, !empty($user['admin']));

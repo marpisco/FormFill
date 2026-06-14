@@ -244,7 +244,21 @@ class RateLimit
         }
     }
 
-    // ─── User-Scoped Rate Limiting ────────────────────────────────────────────
+    /**
+     * Clear attempt/block state for a user-scoped limit (uses sentinel IP).
+     */
+    public static function clearUser(string $action, string $userId): void
+    {
+        global $db;
+        $scopedAction = self::userAction($action, $userId);
+        $ip = self::USER_SENTINEL;
+        $stmt = $db->prepare("DELETE FROM rate_limits WHERE ip = ? AND action = ?");
+        if ($stmt) {
+            $stmt->bind_param("ss", $ip, $scopedAction);
+            $stmt->execute();
+            $stmt->close();
+        }
+    }
 
     /**
      * Build a user-scoped action key for verify_code.

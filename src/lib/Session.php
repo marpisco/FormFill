@@ -98,14 +98,42 @@ class Session
 
     /**
      * Require admin privileges. Returns 403 if not admin.
+     * Refreshes admin status from DB every 5 minutes to catch demotions.
      */
     public static function requireAdmin(): void
     {
         self::requireLogin();
 
+        // Refresh admin status periodically (every 5 minutes)
+        $now = time();
+        if (empty($_SESSION['admin_checked_at']) || ($now - $_SESSION['admin_checked_at']) > 300) {
+            global $db;
+            if (isset($db) && !$db->connect_error) {
+                $stmt = $db->prepare("SELECT admin FROM cache WHERE id = ?");
+                if ($stmt) {
+                    $stmt->bind_param("s", $_SESSION['id']);
+                    $stmt->execute();
+                    $row = $stmt->get_result()->fetch_assoc();
+                    $stmt->close();
+                    $_SESSION['admin'] = !empty($row['admin']);
+                    $_SESSION['admin_checked_at'] = $now;
+                }
+            }
+        }
+
         if (empty($_SESSION['admin'])) {
             http_response_code(403);
             die("Acesso negado. <a href='/'>Voltar</a>");
+        }
+
+        // TOTP gate: if admin requires TOTP and hasn't verified, redirect to TOTP page
+        if (Config::adminRequiresTotp() && empty($_SESSION['totp_verified'])) {
+            // Avoid redirect loop when already on the login page
+            $currentPath = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?: '/';
+            if (!str_starts_with($currentPath, '/login')) {
+                header('Location: /login?step=totp');
+                exit();
+            }
         }
     }
 }

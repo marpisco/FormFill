@@ -190,6 +190,8 @@ if (parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) === '/admin/') {
         </a>";
     }
     echo '</div>';
+    // Close tags for dashboard (subpages add their own)
+    echo '</main>';
 }
 
 // Dev mode bottom banner
@@ -197,5 +199,3 @@ if (Config::isDev()) {
     echo '<div class="fixed bottom-0 left-0 right-0 bg-red-500 text-white text-xs font-bold text-center py-1 z-50">⚠️ MODO DE DESENVOLVIMENTO</div>';
 }
 ?>
-</body>
-</html>

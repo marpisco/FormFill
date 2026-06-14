@@ -17,20 +17,13 @@ if ($action === 'respond' && !empty($_POST['resposta_id']) && !empty($_POST['res
     $respostaId = $_POST['resposta_id'];
     $texto = trim($_POST['resposta_texto']);
 
-    // Mark as responded
-    $stmt = $db->prepare("UPDATE respostas SET respondido = TRUE, resposta = ? WHERE id = ?");
-    if ($stmt) {
-        $stmt->bind_param("ss", $texto, $respostaId);
-        $stmt->execute();
-        $stmt->close();
-    }
-
-    // Get user email and send notification
+    // Get user email and send notification first (so response is not marked if email fails)
     $stmt = $db->prepare(
         "SELECT r.pdf_path, r.form_id, c.email, c.nome 
          FROM respostas r JOIN cache c ON r.enviador_id = c.id 
          WHERE r.id = ?"
     );
+    $emailSent = false;
     if ($stmt) {
         $stmt->bind_param("s", $respostaId);
         $stmt->execute();
@@ -38,21 +31,49 @@ if ($action === 'respond' && !empty($_POST['resposta_id']) && !empty($_POST['res
         $stmt->close();
 
         if ($row && !empty($row['email'])) {
-            Mailer::sendResponseNotification($row['email'], $row['nome'], $texto, $row['pdf_path'] ?? null);
+            $emailSent = Mailer::sendResponseNotification($row['email'], $row['nome'], $texto, $row['pdf_path'] ?? null);
         }
     }
 
-    acaoexecutada("Resposta enviada ao utilizador");
+    // Mark as responded (after email attempt)
+    $stmt = $db->prepare("UPDATE respostas SET respondido = TRUE, resposta = ? WHERE id = ?");
+    if ($stmt) {
+        $stmt->bind_param("ss", $texto, $respostaId);
+        $stmt->execute();
+        $stmt->close();
+    }
+
+    acaoexecutada($emailSent ? "Resposta enviada ao utilizador" : "Resposta registada (email não enviado)");
 }
 
 // ─── Delete response ─────────────────────────────────────────────────────────
 if ($action === 'delete' && !empty($_GET['id']) && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Fetch PDF path before deleting
+    $stmt = $db->prepare("SELECT pdf_path FROM respostas WHERE id = ?");
+    $pdfPath = null;
+    if ($stmt) {
+        $stmt->bind_param("s", $_GET['id']);
+        $stmt->execute();
+        $row = $stmt->get_result()->fetch_assoc();
+        $pdfPath = $row['pdf_path'] ?? null;
+        $stmt->close();
+    }
+
     $stmt = $db->prepare("DELETE FROM respostas WHERE id = ?");
     if ($stmt) {
         $stmt->bind_param("s", $_GET['id']);
         $stmt->execute();
         $stmt->close();
     }
+
+    // Delete the PDF file if it exists
+    if ($pdfPath && $pdfPath !== '') {
+        $pdfFile = __DIR__ . '/../' . ltrim($pdfPath, '/');
+        if (file_exists($pdfFile)) {
+            @unlink($pdfFile);
+        }
+    }
+
     acaoexecutada("Resposta eliminada");
 }
 
@@ -149,7 +170,7 @@ $formsList = $db->query("SELECT id, nome FROM forms ORDER BY nome");
                            class="px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition">PDF</a>
                         <?php endif; ?>
                         <?php if (!$r['respondido']): ?>
-                        <button onclick="showRespondForm('<?= htmlspecialchars($r['id']) ?>', '<?= htmlspecialchars($r['user_nome']) ?>')"
+                        <button onclick="showRespondForm('<?= htmlspecialchars($r['id']) ?>', <?= json_encode($r['user_nome'], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>)"
                                 class="px-2 py-1 text-xs text-brand-600 dark:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/20 rounded transition">Responder</button>
                         <?php endif; ?>
                         <form method="POST" action="?action=delete&id=<?= urlencode($r['id']) ?>" class="inline" onsubmit="return confirm('Eliminar esta resposta?')">

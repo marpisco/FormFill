@@ -46,7 +46,8 @@ $db->query("CREATE TABLE IF NOT EXISTS cache (
     otp_code_hash VARCHAR(255),
     otp_expires DATETIME,
     PRIMARY KEY (id),
-    INDEX idx_cache_email (email)
+    INDEX idx_cache_email (email),
+    UNIQUE INDEX uniq_cache_email (email)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
 // Schema migration: add TOTP/OTP columns for existing installs
@@ -111,7 +112,7 @@ $db->query("CREATE TABLE IF NOT EXISTS respostas (
     resposta TEXT,
     criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
-    FOREIGN KEY (form_id) REFERENCES forms(id),
+    FOREIGN KEY (form_id) REFERENCES forms(id) ON DELETE CASCADE,
     FOREIGN KEY (enviador_id) REFERENCES cache(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 

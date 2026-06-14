@@ -14,6 +14,7 @@ use FormFill\Lib\Session;
 use FormFill\Lib\Csrf;
 use FormFill\Lib\Auth;
 use FormFill\Lib\Config;
+use FormFill\Lib\RateLimit;
 
 // Redirect if already logged in (unless doing OAuth callback)
 $isCallback = isset($_GET['code']) && isset($_GET['state']);
@@ -103,7 +104,7 @@ $totpSecret = null;
 $totpQrSvg = null;
 
 if ($step === 'totp') {
-    // If admin needs TOTP setup (first time)
+    // Case A — New admin needs TOTP setup (first time enrollment)
     if (isset($_SESSION['pending_totp_setup'])) {
         if (!isset($_SESSION['pending_totp_secret'])) {
             $_SESSION['pending_totp_secret'] = Auth::generateTotpSecret();
@@ -114,7 +115,10 @@ if ($step === 'totp') {
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!Csrf::verify($_POST['csrf_token'] ?? '')) {
                 $error = 'Pedido inválido.';
+            } elseif (!RateLimit::reserveUser('verify_totp_setup', $_SESSION['pending_totp_setup'], 5, 900)) {
+                $error = 'Demasiadas tentativas. Aguarde 15 minutos.';
             } elseif (Auth::verifyTotp($totpSecret, $_POST['totp_code'] ?? '')) {
+                RateLimit::clearUser('verify_totp_setup', $_SESSION['pending_totp_setup']);
                 Auth::completeTotpSetup($totpSecret);
                 unset($_SESSION['pending_totp_secret']);
                 header('Location: /');
@@ -124,10 +128,41 @@ if ($step === 'totp') {
             }
         }
     }
-    // Returning admin: TOTP verify
+    // Case B — Enrolled admin needs TOTP verification during fresh login
+    elseif (isset($_SESSION['pending_totp_verify'])) {
+        $pendingUser = $_SESSION['pending_totp_verify'];
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            if (!Csrf::verify($_POST['csrf_token'] ?? '')) {
+                $error = 'Pedido inválido.';
+            } elseif (!RateLimit::reserveUser('verify_totp_login', $pendingUser['id'], 5, 900)) {
+                $error = 'Demasiadas tentativas. Aguarde 15 minutos.';
+            } else {
+                global $db;
+                $stmt = $db->prepare("SELECT totp_secret FROM cache WHERE id = ?");
+                $stmt->bind_param("s", $pendingUser['id']);
+                $stmt->execute();
+                $row = $stmt->get_result()->fetch_assoc();
+                $stmt->close();
+
+                if ($row && $row['totp_secret'] && Auth::verifyTotp($row['totp_secret'], $_POST['totp_code'] ?? '')) {
+                    RateLimit::clearUser('verify_totp_login', $pendingUser['id']);
+                    $_SESSION['totp_verified'] = true;
+                    Auth::login($pendingUser, !empty($pendingUser['admin']));
+                    unset($_SESSION['pending_totp_verify']);
+                    header('Location: /');
+                    exit();
+                } else {
+                    $error = 'Código TOTP incorreto.';
+                }
+            }
+        }
+    }
+    // Case C — Returning admin with active session verifies TOTP
     elseif (!empty($_SESSION['id']) && $_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!Csrf::verify($_POST['csrf_token'] ?? '')) {
             $error = 'Pedido inválido.';
+        } elseif (!RateLimit::reserveUser('verify_totp_return', $_SESSION['id'], 5, 900)) {
+            $error = 'Demasiadas tentativas. Aguarde 15 minutos.';
         } else {
             global $db;
             $stmt = $db->prepare("SELECT totp_secret FROM cache WHERE id = ?");
@@ -137,6 +172,7 @@ if ($step === 'totp') {
             $stmt->close();
 
             if ($row && $row['totp_secret'] && Auth::verifyTotp($row['totp_secret'], $_POST['totp_code'] ?? '')) {
+                RateLimit::clearUser('verify_totp_return', $_SESSION['id']);
                 // TOTP verified — full session
                 $_SESSION['totp_verified'] = true;
                 header('Location: /admin/');

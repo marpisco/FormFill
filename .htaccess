@@ -25,10 +25,8 @@ RedirectMatch 404 /\..*
 # Protect the vendor directory
 RedirectMatch 404 /vendor/
 
-# Protect filledforms directory listing but allow PDF access
-<Directory "filledforms">
-    Options -Indexes
-</Directory>
+# Disallow directory listing of filledforms (Options -Indexes is already set globally above)
+RedirectMatch 403 ^/filledforms/?$
 
 # Cache static assets
 <FilesMatch "\.(css|js|png|jpg|svg|ico)$">
