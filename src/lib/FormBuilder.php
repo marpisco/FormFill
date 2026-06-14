@@ -240,7 +240,7 @@ class FormBuilder
         global $db;
 
         // Delete associated PDF files
-        $stmt = $db->prepare("SELECT pdf_path, dados FROM respostas WHERE form_id = ? AND (pdf_path IS NOT NULL AND pdf_path != '') OR dados IS NOT NULL");
+        $stmt = $db->prepare("SELECT pdf_path, dados FROM respostas WHERE form_id = ? AND (pdf_path IS NOT NULL AND pdf_path != '' OR dados IS NOT NULL)");
         if ($stmt) {
             $stmt->bind_param("s", $id);
             $stmt->execute();

@@ -185,11 +185,11 @@ $countSql = "SELECT COUNT(*) as total FROM respostas r JOIN forms f ON r.form_id
 $countStmt = $db->prepare($countSql);
 $totalRows = 0;
 if ($countStmt) {
-    // Remove the last two params (LIMIT/OFFSET) before binding for count
-    array_pop($types); array_pop($params);
-    array_pop($types); array_pop($params);
-    if (!empty($params)) {
-        $countStmt->bind_param($types, ...$params);
+    // Remove the last two params and type chars (LIMIT/OFFSET) for count query
+    $countTypes = substr($types, 0, -2);
+    $countParams = array_slice($params, 0, -2);
+    if (!empty($countParams)) {
+        $countStmt->bind_param($countTypes, ...$countParams);
     }
     $countStmt->execute();
     $totalRows = (int)$countStmt->get_result()->fetch_assoc()['total'];

@@ -94,6 +94,20 @@ if ($action === 'delete' && !empty($_GET['id']) && $_SERVER['REQUEST_METHOD'] ==
              . "{$refs['forms']} formulários, {$refs['access']} acessos a formulários.";
         echo "<script>alert(" . json_encode($msg) . "); window.history.back();</script>";
     } else {
+        // Prevent deleting the last admin
+        $adminCheck = $db->prepare("SELECT admin FROM cache WHERE id = ?");
+        $adminCheck->bind_param("s", $deleteId);
+        $adminCheck->execute();
+        $isAdmin = $adminCheck->get_result()->fetch_assoc()['admin'] ?? false;
+        $adminCheck->close();
+        if ($isAdmin) {
+            $adminCount = $db->query("SELECT COUNT(*) as c FROM cache WHERE admin = TRUE")->fetch_assoc()['c'];
+            if ($adminCount <= 1) {
+                echo "<script>alert('Não é possível eliminar o último administrador.'); window.history.back();</script>";
+                exit();
+            }
+        }
+
         // Clean up access entries and set logs user_id to NULL (avoid FK violation)
         $cleanStmt = $db->prepare("DELETE FROM forms_access WHERE user_id = ?");
         if ($cleanStmt) {

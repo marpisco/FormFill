@@ -342,9 +342,9 @@ class Auth
                     $newId = 'ms_' . $oid;
                     $displayName = $userData['displayName'] ?? $existing['nome'];
                     $migrated = self::migratePreRegistered($email, $newId, $displayName);
-                    if ($migrated !== false) {
+                    if ($migrated) {
                         $existing['id'] = $newId;
-                        $existing['admin'] = $existing['admin'] || $migrated;
+                        // Preserve original admin status (migration only reports success, not role)
                     }
                 }
                 // Existing user — login directly
@@ -358,6 +358,13 @@ class Auth
                 // Check for pre-registered user to migrate
                 $migrated = self::migratePreRegistered($email, $userId, $displayName);
 
+                // Count named users BEFORE inserting (for first-admin claim)
+                $namedUsers = 0;
+                if (!$migrated && !Config::get('initial_setup_complete')) {
+                    $countStmt = $db->query("SELECT COUNT(*) as cnt FROM cache WHERE nome IS NOT NULL AND nome != ''");
+                    $namedUsers = (int)$countStmt->fetch_assoc()['cnt'];
+                }
+
                 $stmt = $db->prepare(
                     "INSERT INTO cache (id, nome, email) VALUES (?, ?, ?) 
                      ON DUPLICATE KEY UPDATE nome = VALUES(nome)"
@@ -370,10 +377,8 @@ class Auth
 
                 $user = ['id' => $userId, 'nome' => $displayName, 'email' => $email, 'admin' => $migrated, 'totp_secret' => null];
 
-                // Race-safe first-user admin claim (gated on no existing named users)
-                if (!$migrated && !Config::get('initial_setup_complete')) {
-                    $countStmt = $db->query("SELECT COUNT(*) as cnt FROM cache WHERE nome IS NOT NULL AND nome != ''");
-                    if ((int)$countStmt->fetch_assoc()['cnt'] == 0) {
+                // Race-safe first-user admin claim
+                if (!$migrated && !Config::get('initial_setup_complete') && $namedUsers == 0) {
                     $claimStmt = $db->prepare(
                         "INSERT INTO config (config_key, config_value) VALUES ('first_user_admin_id', ?) 
                          ON DUPLICATE KEY UPDATE config_value = config_value"
@@ -393,7 +398,6 @@ class Auth
                         }
                         $claimStmt->close();
                     }
-                    } // end if (namedUsers == 0)
                 }
             }
 
@@ -513,8 +517,7 @@ class Auth
             error_log("FormFill migration error: " . $e->getMessage());
         }
 
-        // Return true if migration happened (regardless of admin status)
-        return true;
+        return $wasAdmin;
     }
 
     // ─── TOTP (Time-based One-Time Password) ────────────────────────────────

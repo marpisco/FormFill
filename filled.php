@@ -240,9 +240,45 @@ if ($action !== 'sign' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST[
 
     $texto = $substitute($form['doc']['texto'] ?? '');
     $criarDoc = $form['doc']['criar'] ?? false;
-    // Force PDF generation when digital signing is required
     if ($requiresSignature && !$criarDoc) {
         $criarDoc = true;
+    }
+
+    // Handle file uploads BEFORE PDF generation (so validation catches both)
+    $allowedExtensions = ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'doc', 'docx', 'xls', 'xlsx', 'txt', 'zip'];
+    foreach ($form['campos'] as $campo) {
+        if (($campo['tipo'] ?? '') === 'file' && !empty($_FILES[$campo['idcampo']]['tmp_name'])) {
+            $fileInfo = $_FILES[$campo['idcampo']];
+            if (($fileInfo['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+                if (!empty($campo['obrigatorio'])) {
+                    $validationErrors[] = "O ficheiro '" . ($campo['descricao'] ?? $campo['idcampo']) . "' não foi enviado corretamente.";
+                }
+                continue;
+            }
+            $origName = basename($fileInfo['name']);
+            $ext = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
+            if (!in_array($ext, $allowedExtensions, true)) {
+                if (!empty($campo['obrigatorio'])) {
+                    $validationErrors[] = "O ficheiro '" . ($campo['descricao'] ?? $campo['idcampo']) . "' tem uma extensão não permitida.";
+                }
+                continue;
+            }
+            $uploadsDir = __DIR__ . '/../data/uploads';
+            if (!is_dir($uploadsDir)) mkdir($uploadsDir, 0755, true);
+            $storedName = date('Ymd') . '_' . Validator::uuid4() . '_' . $origName;
+            $destPath = $uploadsDir . '/' . $storedName;
+            if (move_uploaded_file($fileInfo['tmp_name'], $destPath)) {
+                $fieldValues[$campo['idcampo']] = '../data/uploads/' . $storedName;
+            } elseif (!empty($campo['obrigatorio'])) {
+                $validationErrors[] = "Erro ao guardar o ficheiro '" . ($campo['descricao'] ?? $campo['idcampo']) . "'.";
+            }
+        }
+    }
+
+    // Validate all field and file errors before generating files
+    if (!empty($validationErrors)) {
+        http_response_code(400);
+        die("Erros de validação:\n" . implode("\n", $validationErrors));
     }
 
     if ($criarDoc) {
@@ -275,43 +311,6 @@ if ($action !== 'sign' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST[
         $pdf = new FormFillPDF();
         $pdfRelPath = $pdf->criarDocumento($form['nome'], $texto);
         $pdfAbsPath = __DIR__ . '/' . $pdfRelPath;
-    }
-
-    // Handle file uploads — move to storage outside web root
-    $allowedExtensions = ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'doc', 'docx', 'xls', 'xlsx', 'txt', 'zip'];
-    foreach ($form['campos'] as $campo) {
-        if (($campo['tipo'] ?? '') === 'file' && !empty($_FILES[$campo['idcampo']]['tmp_name'])) {
-            $fileInfo = $_FILES[$campo['idcampo']];
-            // Validate upload succeeded
-            if (($fileInfo['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
-                if (!empty($campo['obrigatorio'])) {
-                    $validationErrors[] = "O ficheiro '" . ($campo['descricao'] ?? $campo['idcampo']) . "' não foi enviado corretamente.";
-                }
-                continue;
-            }
-            $origName = basename($fileInfo['name']);
-            $ext = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
-            if (!in_array($ext, $allowedExtensions, true)) {
-                if (!empty($campo['obrigatorio'])) {
-                    $validationErrors[] = "O ficheiro '" . ($campo['descricao'] ?? $campo['idcampo']) . "' tem uma extensão não permitida.";
-                }
-                continue;
-            }
-            $uploadsDir = __DIR__ . '/../data/uploads';
-            if (!is_dir($uploadsDir)) mkdir($uploadsDir, 0755, true);
-            $storedName = date('Ymd') . '_' . Validator::uuid4() . '_' . $origName;
-            $destPath = $uploadsDir . '/' . $storedName;
-            if (move_uploaded_file($fileInfo['tmp_name'], $destPath)) {
-                $fieldValues[$campo['idcampo']] = '../data/uploads/' . $storedName;
-            } elseif (!empty($campo['obrigatorio'])) {
-                $validationErrors[] = "Erro ao guardar o ficheiro '" . ($campo['descricao'] ?? $campo['idcampo']) . "'.";
-            }
-        }
-    }
-
-    if (!empty($validationErrors)) {
-        http_response_code(400);
-        die("Erros de validação:\n" . implode("\n", $validationErrors));
     }
 
     $respostaId = Validator::uuid4();
