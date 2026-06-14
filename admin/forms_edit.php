@@ -193,16 +193,33 @@ $email = $form['email'] ?? [];
         <!-- Placeholder Cheatsheet -->
         <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
             <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">Placeholders</h3>
-            <div class="text-xs space-y-1 text-slate-500 dark:text-slate-400 font-mono">
-                <p><code>§nomecompleto§</code> — Nome completo</p>
-                <p><code>§nome§</code> — Primeiro nome</p>
-                <p><code>§id§</code> — ID do utilizador</p>
-                <p><code>§email§</code> — Email</p>
-                <p><code>&amp;campo&amp;</code> — Valor do campo</p>
-                <p><code>#data#</code> — Data atual</p>
-                <p><code>§resposta§</code> — Resposta do admin</p>
+
+            <p class="text-xs font-medium text-slate-500 mb-2">📄 Documento PDF</p>
+            <div class="text-xs space-y-1 text-slate-500 dark:text-slate-400 mb-3">
+                <button type="button" onclick="insertPlaceholder('doc_texto', '§nomecompleto§')" class="hover:text-brand-600 dark:hover:text-brand-400"><code class="bg-slate-100 dark:bg-slate-700 px-1 rounded">§nomecompleto§</code> Nome completo</button><br>
+                <button type="button" onclick="insertPlaceholder('doc_texto', '§nome§')" class="hover:text-brand-600 dark:hover:text-brand-400"><code class="bg-slate-100 dark:bg-slate-700 px-1 rounded">§nome§</code> Primeiro nome</button><br>
+                <button type="button" onclick="insertPlaceholder('doc_texto', '§id§')" class="hover:text-brand-600 dark:hover:text-brand-400"><code class="bg-slate-100 dark:bg-slate-700 px-1 rounded">§id§</code> ID do utilizador</button><br>
+                <button type="button" onclick="insertPlaceholder('doc_texto', '§email§')" class="hover:text-brand-600 dark:hover:text-brand-400"><code class="bg-slate-100 dark:bg-slate-700 px-1 rounded">§email§</code> Email</button><br>
+                <button type="button" onclick="insertPlaceholder('doc_texto', '&campo&')" class="hover:text-brand-600 dark:hover:text-brand-400"><code class="bg-slate-100 dark:bg-slate-700 px-1 rounded">&amp;campo&amp;</code> Valor do campo</button><br>
+                <button type="button" onclick="insertPlaceholder('doc_texto', '#data#')" class="hover:text-brand-600 dark:hover:text-brand-400"><code class="bg-slate-100 dark:bg-slate-700 px-1 rounded">#data#</code> Data atual</button>
+            </div>
+
+            <p class="text-xs font-medium text-slate-500 mb-2">📧 Email (todos os campos abaixo)</p>
+            <div class="text-xs space-y-1 text-slate-500 dark:text-slate-400">
+                <p>Use os mesmos placeholders acima. Adicionalmente:</p>
+                <p><code class="bg-slate-100 dark:bg-slate-700 px-1 rounded text-amber-600 dark:text-amber-400">§resposta§</code> <span class="text-amber-600 dark:text-amber-400">Resposta do admin</span> <span class="text-slate-400">(apenas email de notificação)</span></p>
             </div>
         </div>
+        <script>
+        function insertPlaceholder(textareaId, placeholder) {
+            const ta = document.querySelector('[name="' + textareaId + '"]');
+            if (!ta) return;
+            const start = ta.selectionStart;
+            ta.value = ta.value.slice(0, start) + placeholder + ta.value.slice(ta.selectionEnd);
+            ta.focus();
+            ta.selectionStart = ta.selectionEnd = start + placeholder.length;
+        }
+        </script>
     </div>
 
     <!-- Right Canvas: Builder + Preview -->
@@ -224,7 +241,7 @@ $email = $form['email'] ?? [];
                 <span class="text-slate-600 dark:text-slate-300">Gerar PDF</span>
             </label>
             <textarea name="doc_texto" rows="4" placeholder="Eu, §nomecompleto§, declaro..."
-                      class="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm font-mono"><?= htmlspecialchars($doc['texto'] ?? '') ?></textarea>
+                      class="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 text-sm font-mono"><?= htmlspecialchars($doc['texto'] ?? '') ?></textarea>
         </div>
 
         <!-- Email Templates -->

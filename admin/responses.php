@@ -58,18 +58,26 @@ if ($action === 'delete' && !empty($_GET['id']) && $_SERVER['REQUEST_METHOD'] ==
 
 // ─── List responses ──────────────────────────────────────────────────────────
 $search = $_GET['q'] ?? '';
+$filterForm = $_GET['form'] ?? '';
+
 $where = '';
 $params = [];
 $types = '';
 
 if (!empty($search)) {
-    $where = "WHERE (f.nome LIKE ? OR c.nome LIKE ?)";
+    $where = " WHERE (f.nome LIKE ? OR c.nome LIKE ?)";
     $searchParam = "%{$search}%";
     $params = [$searchParam, $searchParam];
     $types = 'ss';
 }
 
-$sql = "SELECT r.id, r.pdf_path, r.respondido, r.criado_em, 
+if (!empty($filterForm)) {
+    $where = empty($where) ? " WHERE f.id = ?" : $where . " AND f.id = ?";
+    $params[] = $filterForm;
+    $types .= 's';
+}
+
+$sql = "SELECT r.id, r.form_id, r.pdf_path, r.respondido, r.criado_em, 
                f.nome AS form_nome, c.nome AS user_nome, c.email AS user_email
         FROM respostas r
         JOIN forms f ON r.form_id = f.id
@@ -89,15 +97,24 @@ if ($stmt) {
 } else {
     $respostas = $db->query($sql);
 }
-?>
 
+// Fetch forms for filter dropdown
+$formsList = $db->query("SELECT id, nome FROM forms ORDER BY nome");
+?>
 <h1 class="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-2">Respostas</h1>
 <p class="text-slate-500 dark:text-slate-400 mb-6">Gira as respostas aos formulários.</p>
 
-<!-- Search -->
-<form method="GET" class="mb-4">
+<!-- Search + Filter -->
+<form method="GET" class="mb-4 flex flex-col sm:flex-row gap-3">
     <input type="text" name="q" value="<?= htmlspecialchars($search) ?>" placeholder="Pesquisar por formulário ou utilizador..."
-           class="w-full sm:w-80 px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+           class="flex-1 px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+    <select name="form" onchange="this.form.submit()" 
+            class="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+        <option value="">Todos os formulários</option>
+        <?php while ($f = $formsList->fetch_assoc()): ?>
+        <option value="<?= htmlspecialchars($f['id']) ?>" <?= $filterForm === $f['id'] ? 'selected' : '' ?>><?= htmlspecialchars($f['nome']) ?></option>
+        <?php endwhile; ?>
+    </select>
 </form>
 
 <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
@@ -127,8 +144,8 @@ if ($stmt) {
                 </td>
                 <td class="px-4 py-3 text-right">
                     <div class="flex items-center justify-end gap-1">
-                        <?php if ($r['pdf_path']): ?>
-                        <a href="/<?= htmlspecialchars(str_replace(__DIR__ . '/../', '', $r['pdf_path'])) ?>" target="_blank"
+                        <?php if ($r['pdf_path'] && $r['pdf_path'] !== ''): ?>
+                        <a href="/<?= htmlspecialchars($r['pdf_path']) ?>" target="_blank"
                            class="px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition">PDF</a>
                         <?php endif; ?>
                         <?php if (!$r['respondido']): ?>
