@@ -131,36 +131,6 @@ $email = $form['email'] ?? [];
             <p class="text-xs text-slate-400 ml-6">O utilizador terá de descarregar o PDF, assinar e voltar a enviar o documento assinado.</p>
         </div>
 
-        <!-- Access List (only for private forms) -->
-        <?php if ($isEdit && (int)($form['privacidade'] ?? 0) === 2): ?>
-        <?php $accessList = FormBuilder::getAccessList($formId); ?>
-        <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4" id="accessListPanel">
-            <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3">Utilizadores com acesso</h3>
-            <?php if (empty($accessList)): ?>
-            <p class="text-xs text-slate-400 mb-2">Nenhum utilizador adicionado.</p>
-            <?php else: ?>
-            <div class="space-y-1 mb-3">
-                <?php foreach ($accessList as $au): ?>
-                <div class="flex items-center justify-between text-sm py-1 px-2 rounded hover:bg-slate-50 dark:hover:bg-slate-700/50">
-                    <span class="text-slate-700 dark:text-slate-200"><?= htmlspecialchars($au['nome']) ?></span>
-                    <form method="POST" action="?action=remove_access&id=<?= urlencode($formId) ?>&user_id=<?= urlencode($au['id']) ?>" class="inline">
-                        <?= Csrf::field() ?>
-                        <button class="text-xs text-red-500 hover:text-red-700">Remover</button>
-                    </form>
-                </div>
-                <?php endforeach; ?>
-            </div>
-            <?php endif; ?>
-            <form method="POST" action="?action=add_access&id=<?= urlencode($formId) ?>" class="flex gap-2">
-                <?= Csrf::field() ?>
-                <input type="text" name="user_search" placeholder="Procurar utilizador por nome ou email..."
-                       class="flex-1 px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm"
-                       list="userSearchList" autocomplete="off">
-                <button type="submit" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white text-sm rounded-lg transition">Adicionar</button>
-            </form>
-        </div>
-        <?php endif; ?>
-
         <!-- Field Palette -->
         <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
             <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3">Tipos de campo</h3>
@@ -289,6 +259,35 @@ $email = $form['email'] ?? [];
         </div>
     </div>
 </form>
+
+<!-- Access List (for private forms — outside main form to avoid nested forms) -->
+<?php if ($isEdit && (int)($form['privacidade'] ?? 0) === 2): ?>
+<?php $accessList = FormBuilder::getAccessList($formId); ?>
+<div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 max-w-2xl mt-6" id="accessListPanel">
+    <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3">Utilizadores com acesso</h3>
+    <?php if (empty($accessList)): ?>
+    <p class="text-xs text-slate-400 mb-2">Nenhum utilizador adicionado.</p>
+    <?php else: ?>
+    <div class="space-y-1 mb-3">
+        <?php foreach ($accessList as $au): ?>
+        <div class="flex items-center justify-between text-sm py-1 px-2 rounded hover:bg-slate-50 dark:hover:bg-slate-700/50">
+            <span class="text-slate-700 dark:text-slate-200"><?= htmlspecialchars($au['nome']) ?></span>
+            <form method="POST" action="?action=remove_access&id=<?= urlencode($formId) ?>&user_id=<?= urlencode($au['id']) ?>" class="inline">
+                <?= Csrf::field() ?>
+                <button class="text-xs text-red-500 hover:text-red-700">Remover</button>
+            </form>
+        </div>
+        <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
+    <form method="POST" action="?action=add_access&id=<?= urlencode($formId) ?>" class="flex gap-2">
+        <?= Csrf::field() ?>
+        <input type="text" name="user_search" placeholder="Procurar utilizador por nome ou email..."
+               class="flex-1 px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm" autocomplete="off">
+        <button type="submit" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white text-sm rounded-lg transition">Adicionar</button>
+    </form>
+</div>
+<?php endif; ?>
 
 <script src="/assets/js/form-builder.js"></script>
 <script>
