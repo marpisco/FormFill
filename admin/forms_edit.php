@@ -293,6 +293,6 @@ $email = $form['email'] ?? [];
 <script src="/assets/js/form-builder.js"></script>
 <script>
     // Initialize with existing fields
-    FormBuilder.init(<?= json_encode($campos, JSON_UNESCAPED_UNICODE) ?>, '<?= $isEdit ? 'true' : 'false' ?>');
+    FormBuilder.init(<?= json_encode($campos, JSON_UNESCAPED_UNICODE) ?>, <?= $isEdit ? 'true' : 'false' ?>);
 </script>
 </main></body></html>
