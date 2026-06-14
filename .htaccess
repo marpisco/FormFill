@@ -1,22 +1,41 @@
+# FormFill — Apache Configuration
+
+# Enable URL rewriting
 RewriteEngine On
 RewriteBase /
 
-# Protect the htaccess file
-<Files .htaccess>
-Order Allow,Deny
-Deny from all
-</Files>
+# Security headers
+<IfModule mod_headers.c>
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
 
-# Protect config
-<Files config.json>
-Order Allow,Deny
-Deny from all
-</Files>
+# Block directory listing
+Options -Indexes
 
-<Files configexample.json>
-Order Allow,Deny
-Deny from all
-</Files>
+# Protect sensitive files from direct access
+<FilesMatch "^(config\.php|\.env|composer\.(json|lock)|\.gitignore)$">
+    Require all denied
+</FilesMatch>
 
-# Disable directory browsing
-Options All -Indexes
+# Block access to hidden files and directories
+RedirectMatch 404 /\..*
+
+# Protect the vendor directory
+RedirectMatch 404 /vendor/
+
+# Disallow directory listing of filledforms. PDF filenames use UUIDs (unguessable).
+# For stronger protection, serve PDFs through a PHP auth proxy.
+RedirectMatch 403 ^/filledforms/?$
+
+# Cache static assets
+<IfModule mod_headers.c>
+<FilesMatch "\.(css|js|png|jpg|svg|ico)$">
+    Header set Cache-Control "max-age=604800, public"
+</FilesMatch>
+</IfModule>
+
+# Block direct access to upload directories (files served through PHP proxy only)
+RedirectMatch 403 ^/uploads/
+RedirectMatch 403 ^/data/uploads/
