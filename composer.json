@@ -7,7 +7,7 @@
         "fpdf/fpdf": "^1.86",
         "league/oauth2-client": "^2.7",
         "pragmarx/google2fa": "^8.0",
-        "chillerlan/php-qrcode": "^5.0",
+        "chillerlan/php-qrcode": "^6.0",
         "ezyang/htmlpurifier": "^4.17"
     },
     "autoload": {
