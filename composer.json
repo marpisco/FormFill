@@ -6,7 +6,7 @@
         "phpmailer/phpmailer": "^7.1",
         "fpdf/fpdf": "^1.86",
         "league/oauth2-client": "^2.7",
-        "pragmarx/google2fa": "^8.0",
+        "pragmarx/google2fa": "^9.0",
         "chillerlan/php-qrcode": "^5.0",
         "ezyang/htmlpurifier": "^4.17"
     },
